@@ -166,7 +166,12 @@ async def send_daily_track():
             description=f"Сегодняшняя рекомендация:\n🎶 **{song}**",
             color=discord.Color.gold(),
         )
-        await channel.send(embed=embed)
+        await channel.send(
+        content="@everyone",
+        embed=embed,
+        allowed_mentions=discord.AllowedMentions(everyone=True),
+        )
+        
 
 
 # 🤖 Обработчик входящих сообщений
