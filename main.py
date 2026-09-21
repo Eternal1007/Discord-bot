@@ -14,6 +14,7 @@ from google.genai import types
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+print("KEY:", GEMINI_KEY[:5] if GEMINI_KEY else None)
 
 # Инициализируем клиент Gemini с явной передачей ключа
 gemini_client = genai.Client(api_key=GEMINI_KEY)
