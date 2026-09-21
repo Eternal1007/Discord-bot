@@ -191,112 +191,93 @@ async def send_daily_track():
 
 # 🤖 Обработчик всех входящих сообщений
 @bot.event
+# 🤖 Обработчик всех входящих сообщений
+@bot.event
 async def on_message(message):
-  if message.author.bot:
-    return
+    if message.author.bot:
+        return
 
-  content = message.content.lower().strip()
-  
-  
-  # 🤖 Проверка: если в сообщении упоминается Аса
-  if "аса" in content:
+    content = message.content.lower().strip()
+
+    # 🤖 Проверка: если в сообщении упоминается Аса
+    if "аса" in content:
         async with message.channel.typing():  # Покажет статус "Аса печатает..."
             try:
-                # Очищаем текст от самого слова "аса", чтобы отправить ИИ только вопрос
-                user_prompt = re.sub(r'\bаса\b', '', message.content, flags=re.IGNORECASE).strip()
+                # Очищаем текст от самого слова "аса"
+                user_prompt = re.sub(r"\bаса\b", "", message.content, flags=re.IGNORECASE).strip()
                 if not user_prompt:
                     user_prompt = "Привет!"
 
+                # Использовать актуальное имя модели gemini-2.5-flash
                 response = gemini_client.models.generate_content(
-                    model='gemini-1.5-flash',
+                    model="gemini-2.5-flash",
                     contents=user_prompt,
                     config=types.GenerateContentConfig(
-                        # Задаем характер Асы через системную инструкцию
-                        system_instruction="Ты — Аса, дерзкая, немного ироничная, но полезная ассистентка в Discord сервере. Отвечай кратко и емко."
-                    )
+                        system_instruction=(
+                            "Ты — Аса, дерзкая, немного ироничная, но полезная"
+                            " ассистентка в Discord сервере. Отвечай кратко и"
+                            " емко."
+                        )
+                    ),
                 )
-                await message.channel.send(response.text)
-                return  # Завершаем, чтобы не срабатывали обычные текстовые реакции
+                if response.text:
+                    await message.channel.send(response.text)
+                    return
             except Exception as e:
-                print(f"Ошибка ИИ: {e}")
+                print(f"❌ Ошибка ИИ Gemini: {e}")
                 await message.channel.send("Ой, у меня мозги закипели... Попробуй еще раз чуть позже!")
-  
-  
-  
-  
-  
-  
-  if content in ["Павленко", "Павлин", "павленко", "павлик"]:
-          image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQerancTqr09xw6t5XFwvR2KF40aWWbKZJRqtjwm8zDO1dJJy_mh23bzNg4&s=10"
-          
-          embed = discord.Embed()
-          embed.set_image(url=image_url)
-          await message.channel.send(embed=embed)
-  
-  if content in ["Черт", "Тимофей", "черт", "тимофей"]:
+                return
+
+    # 🖼️ Картинки-реакции на имена
+    if content in ["павленко", "павлин", "павлик"]:
+        image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQerancTqr09xw6t5XFwvR2KF40aWWbKZJRqtjwm8zDO1dJJy_mh23bzNg4&s=10"
+        embed = discord.Embed()
+        embed.set_image(url=image_url)
+        await message.channel.send(embed=embed)
+
+    elif content in ["черт", "тимофей"]:
         image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTQ1mEIM5wxh0rbz5OVGQx8jaAmNk1x8CHO88R68uJFbM4d1p0NkZoIePT3&s=10"
-        
         embed = discord.Embed()
         embed.set_image(url=image_url)
         await message.channel.send(embed=embed)
-  
-  
-  if content in ["Костя", "Костон", "костя",]:
-          image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTqnSH8VhvNVZN3dFYYMUxMFKH21OgmzvOFJYFDpehJp2AS7SU9erk1TPM&s=10"
-          
-          embed = discord.Embed()
-          embed.set_image(url=image_url)
-          await message.channel.send(embed=embed)
-  
-  
-  if content in ["Хвеся", "хвеся", "хвелий", "Хвелий"]:
+
+    elif content in ["костя", "костон"]:
+        image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTqnSH8VhvNVZN3dFYYMUxMFKH21OgmzvOFJYFDpehJp2AS7SU9erk1TPM&s=10"
+        embed = discord.Embed()
+        embed.set_image(url=image_url)
+        await message.channel.send(embed=embed)
+
+    elif content in ["хвеся", "хвелий"]:
         image_url = "https://external-preview.redd.it/keeper-of-the-light-on-a-scooter-d-v0-DY9_rZ0Ou6mPZABRBPEd49IYniTdHiEaXcZ9aiDasdY.jpg?format=pjpg&auto=webp&s=3429da530924a1f41f3ec5283113b60fcdbb3d1b"
-        
         embed = discord.Embed()
         embed.set_image(url=image_url)
         await message.channel.send(embed=embed)
-  
-  
-  if content in ["Даня", "даня"]:
-      image_url = "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Oryctolagus_cuniculus_Tasmania_2.jpg/960px-Oryctolagus_cuniculus_Tasmania_2.jpg?utm_source=ru.wikipedia.org&utm_campaign=index&utm_content=thumbnail"
-      
-      embed = discord.Embed()
-      embed.set_image(url=image_url)
-      await message.channel.send(embed=embed)
-  
-  
-  if content in ["Луцук", "луцук"]:
-      image_url = "https://pmgroupkz.s3.eu-north-1.amazonaws.com/uploads/esquire/2019/10/dia-de-la-risa-1024x682.jpg"
-      
-      embed = discord.Embed()
-      embed.set_image(url=image_url)
-      await message.channel.send(embed=embed)
-      
 
-      
+    elif content in ["даня"]:
+        image_url = "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Oryctolagus_cuniculus_Tasmania_2.jpg/960px-Oryctolagus_cuniculus_Tasmania_2.jpg?utm_source=ru.wikipedia.org&utm_campaign=index&utm_content=thumbnail"
+        embed = discord.Embed()
+        embed.set_image(url=image_url)
+        await message.channel.send(embed=embed)
 
-  if content in [
-      "пинг",
-      "ping",
-      "Ping",
-      "Пинг",
-      "!ping",
-      "!пинг",
-  ]:
-    await message.channel.send("Понг! 🏓 Я на связи и всё слышу!")
+    elif content in ["луцук"]:
+        image_url = "https://pmgroupkz.s3.eu-north-1.amazonaws.com/uploads/esquire/2019/10/dia-de-la-risa-1024x682.jpg"
+        embed = discord.Embed()
+        embed.set_image(url=image_url)
+        await message.channel.send(embed=embed)
 
-  elif "аса" in content and "привет" in content:
-    await message.channel.send(f"Привет, {message.author.mention}! 👋")
+    # 💬 Текстовые команды
+    elif content in ["пинг", "ping", "!ping", "!пинг"]:
+        await message.channel.send("Понг! 🏓 Я на связи и всё слышу!")
 
-  elif content in ["кто лох", "кто лох дня"]:
-    ctx = await bot.get_context(message)
-    await who_lox(ctx)
+    elif content in ["кто лох", "кто лох дня"]:
+        ctx = await bot.get_context(message)
+        await who_lox(ctx)
 
-  if content in ["команды", "помощь", "хелп", "help"]:
-    ctx = await bot.get_context(message)
-    await help(ctx)
+    elif content in ["команды", "помощь", "хелп", "help"]:
+        ctx = await bot.get_context(message)
+        await help(ctx)
 
-  await bot.process_commands(message)
+    await bot.process_commands(message)
 
 
 @bot.event
