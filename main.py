@@ -4,12 +4,17 @@ import random
 import re
 from aiohttp import web
 import discord
+from google.genai import types
+from google import genai
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
 # 1. Загружаем токен из файла .env
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+
+# Инициализируем клиент Gemini
+gemini_client = genai.Client(api_key=os.getenv("AQ.Ab8RN6L6a6EkQ0zfD7BO6XLwHUoZVThof519_Bhe_GSRSyyqMg"))
 
 # ⚠️ УКАЖИ ID СВОЕГО ТЕКСТОВОГО КАНАЛА
 CHANNEL_ID = 1424321634935902302
@@ -191,6 +196,35 @@ async def on_message(message):
     return
 
   content = message.content.lower().strip()
+  
+  
+  # 🤖 Проверка: если в сообщении упоминается Аса
+  if "аса" in content:
+        async with message.channel.typing():  # Покажет статус "Аса печатает..."
+            try:
+                # Очищаем текст от самого слова "аса", чтобы отправить ИИ только вопрос
+                user_prompt = re.sub(r'\bаса\b', '', message.content, flags=re.IGNORECASE).strip()
+                if not user_prompt:
+                    user_prompt = "Привет!"
+
+                response = gemini_client.models.generate_content(
+                    model='gemini-2.5-flash',
+                    contents=user_prompt,
+                    config=types.GenerateContentConfig(
+                        # Задаем характер Асы через системную инструкцию
+                        system_instruction="Ты — Аса, дерзкая, немного ироничная, но полезная ассистентка в Discord сервере. Отвечай кратко и емко."
+                    )
+                )
+                await message.channel.send(response.text)
+                return  # Завершаем, чтобы не срабатывали обычные текстовые реакции
+            except Exception as e:
+                print(f"Ошибка ИИ: {e}")
+                await message.channel.send("Ой, у меня мозги закипели... Попробуй еще раз чуть позже!")
+  
+  
+  
+  
+  
   
   if content in ["Павленко", "Павлин", "павленко", "павлик"]:
           image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQerancTqr09xw6t5XFwvR2KF40aWWbKZJRqtjwm8zDO1dJJy_mh23bzNg4&s=10"
