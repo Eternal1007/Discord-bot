@@ -172,7 +172,7 @@ async def on_message(message):
                     config = types.GenerateContentConfig(
                         system_instruction=system_instruction,
                     )
-                    return gemini_client.models.generate_content(
+                    response = gemini_client.models.generate_content(
                         model="gemini-3.6-flash",
                         contents=user_prompt,
                         config=config,
