@@ -193,6 +193,33 @@ async def send_daily_track():
 
 
 # 3. Событие старта бота
+
+# 🤖 Обработчик всех входящих сообщений
+@bot.event
+async def on_message(message):
+  # 1. Игнорируем сообщения от самой Асы или других ботов (чтобы не было зацикливания)
+  if message.author.bot:
+    return
+
+  # Приводим текст к нижнему регистру для удобной проверки
+  content = message.content.lower().strip()
+
+  # 2. Реагируем на разные вариации "пинг"
+  if content in ["пинг", "ping", "Ping", "Пинг", "PING", "ПИНГ", "!ping", "!пинг"]:
+    await message.channel.send("Понг! 🏓 Я на связи и всё слышу!")
+
+  # 3. Дополнительные реакции Асы (по желанию):
+  elif "аса" in content and "привет" in content:
+    await message.channel.send(f"Привет, {message.author.mention}! 👋")
+
+  elif content in ["кто лох", "кто лох дня"]:
+    # Вызываем нашу команду !who_lox прямо из текста
+    ctx = await bot.get_context(message)
+    await who_lox(ctx)
+
+  # ⚠️ КРИТИЧЕСКИ ВАЖНО: обрабатываем обычные команды с "!" (!track, !ping и т.д.)
+  await bot.process_commands(message)
+
 @bot.event
 async def on_ready():
   await start_web_server()  # Запускаем портал для Render
