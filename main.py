@@ -123,6 +123,19 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 ROLE_LOX_ID = 1551560593771864154
 
 
+
+# Фоновая задача: Спокойной ночи (23:00)
+@tasks.loop(time=NIGHT_TIME)
+async def send_night_wish():
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        embed = discord.Embed(
+            title="🌙 Время спать!",
+            description="Всем спокойной ночи и приятных снов! 😴✨\nНа сегодня отбой, отдыхайте!",
+            color=discord.Color.dark_blue()
+        )
+        await channel.send(embed=embed)
+
 # Фоновая задача: Лох дня (18:00)
 @tasks.loop(time=LOX_TIME)
 async def send_daily_lox():
@@ -197,6 +210,11 @@ async def on_ready():
     print(
         f"⏰ Фоновая задача 'Лох дня' запущена на {LOX_TIME.strftime('%H:%M')}!"
     )
+# 🌙 Запуск ночного пожелания:
+  if not send_night_wish.is_running():
+    send_night_wish.start()
+    print(f"⏰ Фоновая задача 'Свиньи в стойло' запущена на {NIGHT_TIME.strftime('%H:%M')}!")
+    
 
 
 # 4. Команды бота
@@ -232,6 +250,9 @@ async def track(ctx):
 
 if __name__ == "__main__":
   bot.run(TOKEN)
+  
+  
+  
   # =========================================================
 
 # 📜 ПОЛЕЗНЫЕ ЗАМЕТКИ ДЛЯ РАЗРАБОТКИ
