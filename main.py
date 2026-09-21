@@ -35,10 +35,11 @@ gemini_client = genai.Client(api_key=GEMINI_KEY)
 # ⚠️ УКАЖИ ID СВОЕГО ТЕКСТОВОГО КАНАЛА
 CHANNEL_ID = 1424321634935902302
 
-# ⚠️ НАСТРОЙ ВРЕМЯ ОТПРАВКИ
-DAILY_TIME = datetime.time(hour=10, minute=0, second=0)
-LOX_TIME = datetime.time(hour=18, minute=0, second=0)
-NIGHT_TIME = datetime.time(hour=23, minute=0, second=0)
+# ⚠️ НАСТРОЙ ВРЕМЯ ОТПРАВКИ (по Киевскому времени)
+KYIV_TZ = ZoneInfo("Europe/Kyiv")
+DAILY_TIME = datetime.time(hour=10, minute=0, second=0, tzinfo=KYIV_TZ)
+LOX_TIME = datetime.time(hour=18, minute=0, second=0, tzinfo=KYIV_TZ)
+NIGHT_TIME = datetime.time(hour=23, minute=10, second=0, tzinfo=KYIV_TZ)
 
 # Глобальные переменные для хранения лоха дня
 current_lox_of_the_day = None
@@ -106,7 +107,13 @@ async def send_night_wish():
             description="Всем спокойной ночи и приятных снов! 😴✨\nНа сегодня отбой, отдыхайте!",
             color=discord.Color.dark_blue(),
         )
-        await channel.send(embed=embed)
+        # ⚠️ @everyone внутри embed НЕ пингует людей — Discord не парсит
+        # упоминания в embed'ах. Поэтому тег кладём в content сообщения.
+        await channel.send(
+            content="@everyone",
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions(everyone=True),
+        )
 
 
 @tasks.loop(time=LOX_TIME)
