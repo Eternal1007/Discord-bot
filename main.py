@@ -191,6 +191,14 @@ async def on_message(message):
     return
 
   content = message.content.lower().strip()
+  
+  if content in ["Луцук", "луцук"]:
+      image_url = "https://pmgroupkz.s3.eu-north-1.amazonaws.com/uploads/esquire/2019/10/dia-de-la-risa-1024x682.jpg"
+      
+      embed = discord.Embed()
+      embed.set_image(url=image_url)
+      await message.channel.send(embed=embed)
+      
 
   if content in [
       "пинг",
