@@ -2,6 +2,7 @@ import os
 import random
 import datetime
 import discord
+import re
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 
@@ -15,6 +16,7 @@ CHANNEL_ID = 1424321634935902302
 # ⚠️ НАСТРОЙ ВРЕМЯ ОТПРАВКИ (Часы, Минуты)
 DAILY_TIME = datetime.time(hour=10, minute=0, second=0)
 LOX_TIME = datetime.time(hour=18, minute=0, second=0)
+NIGHT_TIME = datetime.time(hour=23, minute=0, second=0)
 
 # Глобальная переменная для хранения текущего "лоха дня"
 current_lox_of_the_day = None
@@ -50,21 +52,43 @@ intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-
-
+# Глобальная переменная для хранения текущего "лоха дня"
+current_lox_member = None 
+ROLE_LOX_ID = 1551560593771864154  # Замените на ID вашей роли "Лох дня"
 # Фоновая задача: Лох дня (18:00)
 @tasks.loop(time=LOX_TIME)
 async def send_daily_lox():
-    global current_lox_of_the_day
+    global current_lox_of_the_day, current_lox_member
     channel = bot.get_channel(CHANNEL_ID)
-    if channel:
-        current_lox_of_the_day = random.choice(LOX_DAY)
-        embed = discord.Embed(
-            title="🦆 Лох дня!",
-            description=f"🤡 ИТОГИ ДНЯ!:\n💀 **{current_lox_of_the_day}**",
-            color=discord.Color.red(),
-        )
-        await channel.send(embed=embed)
+    if not channel:
+        return
+    
+    guild = channel.guild
+    role = guild.get_role(ROLE_LOX_ID) 
+    current_lox_of_the_day = random.choice(LOX_DAY)
+    match = re.search(r"<@(\d+)>", current_lox_of_the_day)
+    if match and role:
+        user_id = int(match.group(1))
+        if current_lox_member:
+            try:
+                await current_lox_member.remove_roles(role)
+            except discord.HTTPException:
+                pass
+        #Находим нового участника и даем РОЛЬ
+        member = guild.get_member(user_id)
+        if member:
+            try:
+                await member.add_roles(role)
+                current_lox_member = member #запоминаем текущего владельца
+            except discord.HTTPException:
+                print("Не удалось выдать роль")
+                
+            embed = discord.Embed(
+    title="🦆 Лох дня!",    
+    description=f"🤡 ИТОГИ ДНЯ!:\n💀 **{current_lox_of_the_day}**\n\n🎭 *Роль {role.mention if role else 'Лох дня'} официально переходит победителю!*",
+    color=discord.Color.red(),
+            )
+    await channel.send(embed=embed)
 
 
 # Фоновая задача: Трек дня (10:00)
@@ -114,7 +138,7 @@ async def who_lox(ctx):
 # 5. Команда !ping для проверки
 @bot.command()
 async def ping(ctx):
-    await ctx.send("Понг! 🏓 Бот на связи и всё работает!")
+    await ctx.send("Понг! 🏓 Я на связи и всё работает!")
 
 
 # 6. Команда !track для получения случайного трека вручную
