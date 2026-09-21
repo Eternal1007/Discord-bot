@@ -192,12 +192,53 @@ async def on_message(message):
 
   content = message.content.lower().strip()
   
+  if content in ["Павленко", "Павлин", "павленко", "павлик"]:
+          image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQerancTqr09xw6t5XFwvR2KF40aWWbKZJRqtjwm8zDO1dJJy_mh23bzNg4&s=10"
+          
+          embed = discord.Embed()
+          embed.set_image(url=image_url)
+          await message.channel.send(embed=embed)
+  
+  if content in ["Черт", "Тимофей", "черт", "тимофей"]:
+        image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTQ1mEIM5wxh0rbz5OVGQx8jaAmNk1x8CHO88R68uJFbM4d1p0NkZoIePT3&s=10"
+        
+        embed = discord.Embed()
+        embed.set_image(url=image_url)
+        await message.channel.send(embed=embed)
+  
+  
+  if content in ["Костя", "Костон", "костя",]:
+          image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTqnSH8VhvNVZN3dFYYMUxMFKH21OgmzvOFJYFDpehJp2AS7SU9erk1TPM&s=10"
+          
+          embed = discord.Embed()
+          embed.set_image(url=image_url)
+          await message.channel.send(embed=embed)
+  
+  
+  if content in ["Хвеся", "хвеся", "хвелий", "Хвелий"]:
+        image_url = "https://external-preview.redd.it/keeper-of-the-light-on-a-scooter-d-v0-DY9_rZ0Ou6mPZABRBPEd49IYniTdHiEaXcZ9aiDasdY.jpg?format=pjpg&auto=webp&s=3429da530924a1f41f3ec5283113b60fcdbb3d1b"
+        
+        embed = discord.Embed()
+        embed.set_image(url=image_url)
+        await message.channel.send(embed=embed)
+  
+  
+  if content in ["Даня", "даня"]:
+      image_url = "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/37/Oryctolagus_cuniculus_Tasmania_2.jpg/960px-Oryctolagus_cuniculus_Tasmania_2.jpg?utm_source=ru.wikipedia.org&utm_campaign=index&utm_content=thumbnail"
+      
+      embed = discord.Embed()
+      embed.set_image(url=image_url)
+      await message.channel.send(embed=embed)
+  
+  
   if content in ["Луцук", "луцук"]:
       image_url = "https://pmgroupkz.s3.eu-north-1.amazonaws.com/uploads/esquire/2019/10/dia-de-la-risa-1024x682.jpg"
       
       embed = discord.Embed()
       embed.set_image(url=image_url)
       await message.channel.send(embed=embed)
+      
+
       
 
   if content in [
