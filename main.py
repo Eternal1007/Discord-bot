@@ -10,14 +10,26 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # ⚠️ УКАЖИ ID СВОЕГО ТЕКСТОВОГО КАНАЛА (куда бот будет слать трек)
-# Нажми ПКМ по нужному текстовому каналу в Discord -> Скопировать ID канала
-CHANNEL_ID =  1424321634935902302 # Замени эти цифры на реальный ID канала!
+CHANNEL_ID = 1424321634935902302
 
 # ⚠️ НАСТРОЙ ВРЕМЯ ОТПРАВКИ (Часы, Минуты)
-# Например, hour=10, minute=0 означает 10:00 утра по времени твоего ПК/сервера
 DAILY_TIME = datetime.time(hour=10, minute=0, second=0)
+LOX_TIME = datetime.time(hour=18, minute=0, second=0)
 
-# Список треков (можно добавлять названия или прямые ссылки на YouTube/Spotify)
+# Глобальная переменная для хранения текущего "лоха дня"
+current_lox_of_the_day = None
+
+LOX_DAY = [
+    "Сегодня главный Лох Хвелий(Велий) Ярослав Юджинович<@1266287283447791709>",
+    "Главный лох на сегодня Властелин Костя(Смех владыки)<@998569440432095253>",
+    "Сегодня главный лох Тимочерт(Сын моржа)<@857923827346046977>",
+    "Сегодня главный ЛОШАРА это Даня кролик(Смех Предворного шута)<@1317437941743878248>",
+    "Лохушка на сегодня это Маша(Барни будет плакать)<@1309448666918158347>",
+    "Главный лох на сегодня это Влад(У тебя слабый рейджин и 0 ауры)<@1168095961415962624>",
+    "Лошарище местный сегодня это Павлин Артем(Марина Китоглав)<@952601502395011142>",
+]
+
+# Список треков со ссылками
 TRACKS_LIST = [
     "[Nirvana - Lounge Act 🎸](https://open.spotify.com/track/1o5jmMhhk2UZ9YP1X5fXfj?si=49a4e9ad37e24c2a)",
     "[Nirvana - Drain You 🎸](https://open.spotify.com/track/0bTLGlCqwZXwJGWGE2Dywg?si=f775e73a88b64f23)",
@@ -40,7 +52,22 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
-# 3. Фоновая задача для ежедневного трека
+# Фоновая задача: Лох дня (18:00)
+@tasks.loop(time=LOX_TIME)
+async def send_daily_lox():
+    global current_lox_of_the_day
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel:
+        current_lox_of_the_day = random.choice(LOX_DAY)
+        embed = discord.Embed(
+            title="🦆 Лох дня!",
+            description=f"🤡 ИТОГИ ДНЯ!:\n💀 **{current_lox_of_the_day}**",
+            color=discord.Color.red(),
+        )
+        await channel.send(embed=embed)
+
+
+# Фоновая задача: Трек дня (10:00)
 @tasks.loop(time=DAILY_TIME)
 async def send_daily_track():
     channel = bot.get_channel(CHANNEL_ID)
@@ -49,19 +76,39 @@ async def send_daily_track():
         embed = discord.Embed(
             title="☀️ Доброе утро! Трек дня!",
             description=f"Сегодняшняя рекомендация:\n🎶 **{song}**",
-            color=discord.Color.gold()
+            color=discord.Color.gold(),
         )
         await channel.send(embed=embed)
 
 
-# 4. Событие старта бота
+# 3. Единственное событие старта бота
 @bot.event
 async def on_ready():
     print(f"✅ Бот {bot.user} успешно запустился!")
-    # Запускаем ежедневный цикл
+
     if not send_daily_track.is_running():
         send_daily_track.start()
         print(f"⏰ Фоновая задача 'Трек дня' запущена на {DAILY_TIME.strftime('%H:%M')}!")
+
+    if not send_daily_lox.is_running():
+        send_daily_lox.start()
+        print(f"⏰ Фоновая задача 'Лох дня' запущена на {LOX_TIME.strftime('%H:%M')}!")
+
+
+# 4. Команда !who_lox для перепроверки
+@bot.command()
+async def who_lox(ctx):
+    global current_lox_of_the_day
+
+    if current_lox_of_the_day is None:
+        current_lox_of_the_day = random.choice(LOX_DAY)
+
+    embed = discord.Embed(
+        title="🔍 ПЕРЕПРОВЕРКА: Кто сегодня лох?",
+        description=f"Напоминаю, титул зафиксирован:\n\n{current_lox_of_the_day}",
+        color=discord.Color.dark_red(),
+    )
+    await ctx.send(embed=embed)
 
 
 # 5. Команда !ping для проверки
@@ -77,7 +124,7 @@ async def track(ctx):
     embed = discord.Embed(
         title="🎵 Случайный трек",
         description=f"Рекомендация для тебя:\n🎶 **{song}**",
-        color=discord.Color.purple()
+        color=discord.Color.purple(),
     )
     await ctx.send(embed=embed)
 
@@ -85,6 +132,21 @@ async def track(ctx):
 # 7. Запуск бота
 if __name__ == "__main__":
     bot.run(TOKEN)
-#command  list:!ping, !track
-#for start:python main.py
-    
+
+# =========================================================
+# 📜 ПОЛЕЗНЫЕ ЗАМЕТКИ ДЛЯ РАЗРАБОТКИ
+# =========================================================
+#
+# 🤖 Список команд в Discord:
+#   !ping    - Проверка работы бота
+#   !track   - Случайный трек прямо сейчас
+#   !who_lox - Перепроверить, кто сегодня лох
+#
+# 🚀 Запуск бота в терминале:
+#   python main.py
+#
+# 🐙 Полезные команды для GitHub:
+#   git add .
+#   git commit -m "Твое сообщение"
+#   git push
+# =========================================================
