@@ -9,6 +9,7 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from google.genai import errors as genai_errors
 
 # 1. Загружаем токен из файла .env
 load_dotenv()
@@ -172,11 +173,32 @@ async def on_message(message):
                     config = types.GenerateContentConfig(
                         system_instruction=system_instruction,
                     )
-                    response = gemini_client.models.generate_content(
-                        model="gemini-3.8-flash",
-                        contents=user_prompt,
-                        config=config,
-                    )
+
+                    # 🔁 Повторяем запрос при временной перегрузке Gemini (503)
+                    max_retries = 3
+                    delay_seconds = 2
+                    last_error = None
+
+                    for attempt in range(1, max_retries + 1):
+                        try:
+                            return gemini_client.models.generate_content(
+                                model="gemini-3.6-flash",
+                                contents=user_prompt,
+                                config=config,
+                            )
+                        except genai_errors.ServerError as e:
+                            last_error = e
+                            if "503" in str(e) or "UNAVAILABLE" in str(e):
+                                print(
+                                    f"⚠️ Gemini перегружен (попытка {attempt}/{max_retries}), жду {delay_seconds}с..."
+                                )
+                                if attempt < max_retries:
+                                    import time
+                                    time.sleep(delay_seconds)
+                                continue
+                            raise
+
+                    raise last_error
 
                 response = await asyncio.to_thread(get_gemini_response)
 
@@ -184,7 +206,9 @@ async def on_message(message):
                     await message.channel.send(response.text)
                     return
             except Exception as e:
+                import traceback
                 print(f"❌ Ошибка ИИ Gemini: {e}")
+                traceback.print_exc()
                 await message.channel.send(
                     "Ой, у меня мозги закипели... Попробуй еще раз чуть позже!"
                 )
@@ -298,128 +322,3 @@ async def track(ctx):
 
 if __name__ == "__main__":
     bot.run(TOKEN)
-    
-    
- # =========================================================
-
-
-
-
-
-
-
-
-
-# =========================================================
-
-
-
-
-
-
-
-#
-
-
-
-
-
-
-
-# 🤖 Список команд в Discord:
-
-
-
-
-
-
-
-#   !ping    - Проверка работы бота
-
-
-
-
-
-
-
-#   !track   - Случайный трек прямо сейчас
-
-
-
-
-
-
-
-#   !who_lox - Перепроверить, кто сегодня лох
-
-
-
-
-
-
-
-#
-
-
-
-
-
-
-
-# 🚀 Запуск бота в терминале:
-
-
-
-
-
-
-
-#   python main.py
-
-
-
-
-
-
-
-#
-
-
-
-
-
-
-
-# 🐙 Полезные команды для GitHub:
-
-
-
-
-
-
-
-#   git add .
-
-
-
-
-
-
-
-#   git commit -m "Твое сообщение"
-
-
-
-
-
-
-
-#   git push
-
-
-
-
-
-
-
-# =========================================================
