@@ -23,6 +23,15 @@ NIGHT_TIME = datetime.time(hour=23, minute=0, second=0)
 current_lox_of_the_day = None
 current_lox_member = None
 
+#Список комманд
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+bot.remove_command("help")
+
+
 LOX_DAY = [
     (
         "Сегодня главный Лох Хвелий(Велий) Ярослав Юджинович"
@@ -198,6 +207,9 @@ async def send_daily_track():
 @bot.event
 async def on_message(message):
   # 1. Игнорируем сообщения от самой Асы или других ботов (чтобы не было зацикливания)
+  
+  content = message.content.lower().strip()
+  
   if message.author.bot:
     return
 
@@ -216,6 +228,10 @@ async def on_message(message):
     # Вызываем нашу команду !who_lox прямо из текста
     ctx = await bot.get_context(message)
     await who_lox(ctx)
+    
+  if content in ["команды", "помощь", "хелп", "help"]:
+     ctx = await bot.get_context(message)
+     await custom_help(ctx)
 
   # ⚠️ КРИТИЧЕСКИ ВАЖНО: обрабатываем обычные команды с "!" (!track, !ping и т.д.)
   await bot.process_commands(message)
@@ -245,6 +261,51 @@ async def on_ready():
 
 
 # 4. Команды бота
+
+
+# 📜 Команда для вывода всех возможностей Асы
+@bot.command(name="help")
+async def custom_help(ctx):
+  embed = discord.Embed(
+      title="📖 Список команд Асы",
+      description=(
+          "Привет! Я **Аса** 🗡️. Вот список всех доступных команд и функций,"
+          " которые я умею выполнять на сервере:"
+      ),
+      color=discord.Color.from_rgb(138, 43, 226),  # Фиолетовый цвет
+  )
+
+  # Раздел: Основные команды
+  embed.add_field(
+      name="💬 Основные команды",
+      value=(
+          "`!ping` или `пинг` — проверить, на связи ли Аса\n"
+          "`!track` — получить случайный музыкальный трек\n"
+          "`!who_lox` или `кто лох` — узнать, кто сегодня выбран Лохом дня"
+      ),
+      inline=False,
+  )
+
+  # Раздел: Автоматические события
+  embed.add_field(
+      name="⏰ Автоматические события",
+      value=(
+          "☀️ **10:00** — Утренняя рекомендация трека дня\n"
+          "🦆 **18:00** — Выбор «Лоха дня» с перевыдачей специальной роли\n"
+          "🌙 **23:00** — Пожелание спокойной ночи"
+      ),
+      inline=False,
+  )
+
+  embed.set_footer(
+      text=f"Запросил: {ctx.author.display_name}",
+      icon_url=(
+          ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url
+      ),
+  )
+
+  await ctx.send(embed=embed)
+
 @bot.command()
 async def who_lox(ctx):
   global current_lox_of_the_day
