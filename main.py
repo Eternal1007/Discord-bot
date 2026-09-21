@@ -23,14 +23,15 @@ NIGHT_TIME = datetime.time(hour=23, minute=50, second=0)
 current_lox_of_the_day = None
 current_lox_member = None
 
-#Список комманд
+# Настройка прав и инициализация бота
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
-bot.remove_command("help")
+bot.remove_command("help")  # Отключаем встроенный help
 
+ROLE_LOX_ID = 1551560593771864154
 
 LOX_DAY = [
     (
@@ -106,7 +107,8 @@ TRACKS_LIST = [
     ),
 ]
 
-# 🌐 Мини веб-сервер для поддержки работы Render Web Service
+
+# 🌐 Мини веб-сервер для Render Web Service
 async def handle(request):
   return web.Response(text="Bot is running 24/7!")
 
@@ -122,28 +124,21 @@ async def start_web_server():
   print(f"🌐 Веб-сервер запущен на порту {port}")
 
 
-# 2. Настраиваем права бота
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-
-bot = commands.Bot(command_prefix="!", intents=intents)
-
-ROLE_LOX_ID = 1551560593771864154
-
-
-
-# Фоновая задача: Спокойной ночи (23:00)
+# Фоновая задача: Спокойной ночи
 @tasks.loop(time=NIGHT_TIME)
 async def send_night_wish():
-    channel = bot.get_channel(CHANNEL_ID)
-    if channel:
-        embed = discord.Embed(
-            title="🌙 Время спать!",
-            description="Всем спокойной ночи и приятных снов! 😴✨\nНа сегодня отбой, отдыхайте!",
-            color=discord.Color.dark_blue()
-        )
-        await channel.send(embed=embed)
+  channel = bot.get_channel(CHANNEL_ID)
+  if channel:
+    embed = discord.Embed(
+        title="🌙 Время спать!",
+        description=(
+            "Всем спокойной ночи и приятных снов! 😴✨\nНа сегодня отбой,"
+            " отдыхайте!"
+        ),
+        color=discord.Color.dark_blue(),
+    )
+    await channel.send(embed=embed)
+
 
 # Фоновая задача: Лох дня (18:00)
 @tasks.loop(time=LOX_TIME)
@@ -201,44 +196,39 @@ async def send_daily_track():
     await channel.send(embed=embed)
 
 
-# 3. Событие старта бота
-
 # 🤖 Обработчик всех входящих сообщений
 @bot.event
 async def on_message(message):
-  # 1. Игнорируем сообщения от самой Асы или других ботов (чтобы не было зацикливания)
-  
-  content = message.content.lower().strip()
-  
   if message.author.bot:
     return
 
-  # Приводим текст к нижнему регистру для удобной проверки
   content = message.content.lower().strip()
 
-  # 2. Реагируем на разные вариации "пинг"
-  if content in ["пинг", "ping", "Ping", "Пинг", "PING", "ПИНГ", "!ping", "!пинг"]:
+  if content in [
+      "пинг",
+      "ping",
+      "!ping",
+      "!пинг",
+  ]:
     await message.channel.send("Понг! 🏓 Я на связи и всё слышу!")
 
-  # 3. Дополнительные реакции Асы (по желанию):
   elif "аса" in content and "привет" in content:
     await message.channel.send(f"Привет, {message.author.mention}! 👋")
 
   elif content in ["кто лох", "кто лох дня"]:
-    # Вызываем нашу команду !who_lox прямо из текста
     ctx = await bot.get_context(message)
     await who_lox(ctx)
-    
-  if content in ["команды", "помощь", "хелп", "help"]:
-     ctx = await bot.get_context(message)
-     await help(ctx)
 
-  # ⚠️ КРИТИЧЕСКИ ВАЖНО: обрабатываем обычные команды с "!" (!track, !ping и т.д.)
+  if content in ["команды", "помощь", "хелп", "help"]:
+    ctx = await bot.get_context(message)
+    await help(ctx)
+
   await bot.process_commands(message)
+
 
 @bot.event
 async def on_ready():
-  await start_web_server()  # Запускаем портал для Render
+  await start_web_server()
   print(f"✅ Бот {bot.user} успешно запустился!")
 
   if not send_daily_track.is_running():
@@ -253,29 +243,27 @@ async def on_ready():
     print(
         f"⏰ Фоновая задача 'Лох дня' запущена на {LOX_TIME.strftime('%H:%M')}!"
     )
-# 🌙 Запуск ночного пожелания:
+
   if not send_night_wish.is_running():
     send_night_wish.start()
-    print(f"⏰ Фоновая задача 'Свиньи в стойло' запущена на {NIGHT_TIME.strftime('%H:%M')}!")
-    
+    print(
+        "⏰ Фоновая задача 'Спокойной ночи' запущена на"
+        f" {NIGHT_TIME.strftime('%H:%M')}!"
+    )
 
 
-# 4. Команды бота
-
-
-# 📜 Команда для вывода всех возможностей Асы
-@bot.command(name="help")
-async def custom_help(ctx):
+# 📜 Команда помощи
+@bot.command()
+async def help(ctx):
   embed = discord.Embed(
       title="📖 Список команд Асы",
       description=(
           "Привет! Я **Аса** 🗡️. Вот список всех доступных команд и функций,"
           " которые я умею выполнять на сервере:"
       ),
-      color=discord.Color.from_rgb(138, 43, 226),  # Фиолетовый цвет
+      color=discord.Color.from_rgb(138, 43, 226),
   )
 
-  # Раздел: Основные команды
   embed.add_field(
       name="💬 Основные команды",
       value=(
@@ -286,13 +274,12 @@ async def custom_help(ctx):
       inline=False,
   )
 
-  # Раздел: Автоматические события
   embed.add_field(
       name="⏰ Автоматические события",
       value=(
           "☀️ **10:00** — Утренняя рекомендация трека дня\n"
           "🦆 **18:00** — Выбор «Лоха дня» с перевыдачей специальной роли\n"
-          "🌙 **23:00** — Пожелание спокойной ночи"
+          "🌙 **23:50** — Пожелание спокойной ночи"
       ),
       inline=False,
   )
@@ -305,6 +292,7 @@ async def custom_help(ctx):
   )
 
   await ctx.send(embed=embed)
+
 
 @bot.command()
 async def who_lox(ctx):
@@ -339,38 +327,65 @@ async def track(ctx):
 if __name__ == "__main__":
   bot.run(TOKEN)
   
-  
-  
-  # =========================================================
+   # =========================================================
 
-# 📜 ПОЛЕЗНЫЕ ЗАМЕТКИ ДЛЯ РАЗРАБОТКИ
+
+
 
 # =========================================================
 
+
+
 #
+
+
 
 # 🤖 Список команд в Discord:
 
+
+
 #   !ping    - Проверка работы бота
+
+
 
 #   !track   - Случайный трек прямо сейчас
 
+
+
 #   !who_lox - Перепроверить, кто сегодня лох
 
+
+
 #
+
+
 
 # 🚀 Запуск бота в терминале:
 
+
+
 #   python main.py
+
+
 
 #
 
+
+
 # 🐙 Полезные команды для GitHub:
+
+
 
 #   git add .
 
+
+
 #   git commit -m "Твое сообщение"
 
+
+
 #   git push
+
+
 
 # =========================================================
