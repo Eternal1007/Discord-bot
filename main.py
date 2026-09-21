@@ -212,19 +212,18 @@ async def on_message(message):
                     user_prompt = "Привет!"
 
                 # Функция-обертка для асинхронного вызова Gemini
+                # Функция-обертка для асинхронного вызова Gemini
                 def get_gemini_response():
                     prompt_with_system = (
-                        "Ты — Аса, дерзкая, немного ироничная, но полезная"
-                        " ассистентка в Discord сервере. Отвечай кратко и"
-                        " емко.\n\nПользователь:"
-                        f" {user_prompt}"
+                        "Ты — Аса, дерзкая, немного ироничная, но полезная ассистентка в Discord сервере. Отвечай кратко и емко.\n\n"
+                        f"Пользователь: {user_prompt}"
                     )
                     return gemini_client.models.generate_content(
                         model="gemini-2.5-flash",
                         contents=prompt_with_system,
                     )
 
-                # Запускаем генерацию в отдельном потоке, чтобы не блокировать бота
+                # Запускаем генерацию в отдельном потоке
                 response = await asyncio.to_thread(get_gemini_response)
 
                 if response and response.text:
