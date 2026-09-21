@@ -1,6 +1,7 @@
 import datetime
 import os
 import random
+import asyncio
 import re
 from aiohttp import web
 import discord
@@ -201,31 +202,39 @@ async def on_message(message):
 
     # 🤖 Проверка: если в сообщении упоминается Аса
     if "аса" in content:
-        async with message.channel.typing():  # Покажет статус "Аса печатает..."
+        async with message.channel.typing():
             try:
                 # Очищаем текст от самого слова "аса"
-                user_prompt = re.sub(r"\bаса\b", "", message.content, flags=re.IGNORECASE).strip()
+                user_prompt = re.sub(
+                    r"\bаса\b", "", message.content, flags=re.IGNORECASE
+                ).strip()
                 if not user_prompt:
                     user_prompt = "Привет!"
 
-                # Использовать актуальное имя модели gemini-2.5-flash
-                response = gemini_client.models.generate_content(
-                    model="gemini-2.5-flash",
-                    contents=user_prompt,
-                    config=types.GenerateContentConfig(
-                        system_instruction=(
-                            "Ты — Аса, дерзкая, немного ироничная, но полезная"
-                            " ассистентка в Discord сервере. Отвечай кратко и"
-                            " емко."
-                        )
-                    ),
-                )
-                if response.text:
+                # Функция-обертка для асинхронного вызова Gemini
+                def get_gemini_response():
+                    prompt_with_system = (
+                        "Ты — Аса, дерзкая, немного ироничная, но полезная"
+                        " ассистентка в Discord сервере. Отвечай кратко и"
+                        " емко.\n\nПользователь:"
+                        f" {user_prompt}"
+                    )
+                    return gemini_client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=prompt_with_system,
+                    )
+
+                # Запускаем генерацию в отдельном потоке, чтобы не блокировать бота
+                response = await asyncio.to_thread(get_gemini_response)
+
+                if response and response.text:
                     await message.channel.send(response.text)
                     return
             except Exception as e:
                 print(f"❌ Ошибка ИИ Gemini: {e}")
-                await message.channel.send("Ой, у меня мозги закипели... Попробуй еще раз чуть позже!")
+                await message.channel.send(
+                    "Ой, у меня мозги закипели... Попробуй еще раз чуть позже!"
+                )
                 return
 
     # 🖼️ Картинки-реакции на имена
