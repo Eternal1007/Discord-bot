@@ -17,7 +17,7 @@ CHANNEL_ID = 1424321634935902302
 # ⚠️ НАСТРОЙ ВРЕМЯ ОТПРАВКИ (Часы, Минуты)
 DAILY_TIME = datetime.time(hour=10, minute=0, second=0)
 LOX_TIME = datetime.time(hour=18, minute=0, second=0)
-NIGHT_TIME = datetime.time(hour=23, minute=50, second=0)
+NIGHT_TIME = datetime.time(hour=23, minute=0, second=0)
 
 # Глобальные переменные для хранения лоха дня
 current_lox_of_the_day = None
@@ -207,6 +207,8 @@ async def on_message(message):
   if content in [
       "пинг",
       "ping",
+      "Ping",
+      "Пинг",
       "!ping",
       "!пинг",
   ]:
