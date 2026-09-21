@@ -17,7 +17,7 @@ CHANNEL_ID = 1424321634935902302
 # ⚠️ НАСТРОЙ ВРЕМЯ ОТПРАВКИ (Часы, Минуты)
 DAILY_TIME = datetime.time(hour=10, minute=0, second=0)
 LOX_TIME = datetime.time(hour=18, minute=0, second=0)
-NIGHT_TIME = datetime.time(hour=23, minute=0, second=0)
+NIGHT_TIME = datetime.time(hour=23, minute=50, second=0)
 
 # Глобальные переменные для хранения лоха дня
 current_lox_of_the_day = None
@@ -231,7 +231,7 @@ async def on_message(message):
     
   if content in ["команды", "помощь", "хелп", "help"]:
      ctx = await bot.get_context(message)
-     await custom_help(ctx)
+     await help(ctx)
 
   # ⚠️ КРИТИЧЕСКИ ВАЖНО: обрабатываем обычные команды с "!" (!track, !ping и т.д.)
   await bot.process_commands(message)
