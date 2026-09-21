@@ -14,7 +14,7 @@ load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Инициализируем клиент Gemini
-gemini_client = genai.Client(api_key=os.getenv("AQ.Ab8RN6L6a6EkQ0zfD7BO6XLwHUoZVThof519_Bhe_GSRSyyqMg"))
+gemini_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 # ⚠️ УКАЖИ ID СВОЕГО ТЕКСТОВОГО КАНАЛА
 CHANNEL_ID = 1424321634935902302
