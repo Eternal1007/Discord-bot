@@ -10,6 +10,18 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from google.genai import errors as genai_errors
+from zoneinfo import ZoneInfo
+
+
+def get_quota_reset_timestamp() -> int:
+    """Возвращает unix-timestamp следующей полуночи по Pacific Time —
+    именно тогда Google обнуляет дневной лимит бесплатного тарифа Gemini."""
+    pacific = ZoneInfo("America/Los_Angeles")
+    now_pacific = datetime.datetime.now(pacific)
+    next_midnight = (now_pacific + datetime.timedelta(days=1)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return int(next_midnight.timestamp())
 
 # 1. Загружаем токен из файла .env
 load_dotenv()
@@ -205,6 +217,27 @@ async def on_message(message):
                 if response and response.text:
                     await message.channel.send(response.text)
                     return
+            except genai_errors.ClientError as e:
+                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                    reset_ts = get_quota_reset_timestamp()
+                    embed = discord.Embed(
+                        title="⏳ Лимит запросов на сегодня исчерпан",
+                        description=(
+                            "У меня закончилась дневная квота бесплатного "
+                            "тарифа Gemini.\n\n"
+                            f"Лимит обновится: <t:{reset_ts}:R> "
+                            f"(<t:{reset_ts}:t> по местному времени)"
+                        ),
+                        color=discord.Color.orange(),
+                    )
+                    print(f"⚠️ Лимит Gemini исчерпан: {e}")
+                    await message.channel.send(embed=embed)
+                    return
+                print(f"❌ Ошибка ИИ Gemini (ClientError): {e}")
+                await message.channel.send(
+                    "Ой, у меня мозги закипели... Попробуй еще раз чуть позже!"
+                )
+                return
             except Exception as e:
                 import traceback
                 print(f"❌ Ошибка ИИ Gemini: {e}")
