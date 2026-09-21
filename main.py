@@ -208,7 +208,7 @@ async def on_message(message):
                     user_prompt = "Привет!"
 
                 response = gemini_client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-1.5-flash',
                     contents=user_prompt,
                     config=types.GenerateContentConfig(
                         # Задаем характер Асы через системную инструкцию
