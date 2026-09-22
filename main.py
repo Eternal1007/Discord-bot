@@ -45,12 +45,24 @@ ROLE_LOX_ID = 1551560593771864154
 # Замени на свой Discord ID (Settings -> Advanced -> Developer Mode,
 # потом ПКМ по своему профилю -> Copy User ID). Можно добавить несколько ID.
 PROTECTED_IDS = {
-    998569440432095253,  # <-- вставь сюда свой реальный Discord ID
+    123456789012345678,  # <-- вставь сюда свой реальный Discord ID
 }
 
 
 def is_protected(member: discord.Member) -> bool:
     return member.id in PROTECTED_IDS
+
+
+# 🎖️ Роль, участникам которой разрешено мутить/кикать из войса
+MOD_ROLE_ID = 1491106859334111466
+
+
+def has_mod_role():
+    async def predicate(ctx: commands.Context) -> bool:
+        if not isinstance(ctx.author, discord.Member):
+            return False
+        return any(role.id == MOD_ROLE_ID for role in ctx.author.roles)
+    return commands.check(predicate)
 
 
 LOX_DAY = [
@@ -287,7 +299,7 @@ async def on_ready():
 # Единая обработка ошибок команд (в т.ч. нехватки прав)
 @bot.event
 async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
+    if isinstance(error, (commands.MissingPermissions, commands.CheckFailure)):
         await ctx.send("У тебя недостаточно прав для этой команды.")
     elif isinstance(error, commands.MemberNotFound):
         await ctx.send("Не нашла такого пользователя на сервере.")
@@ -349,7 +361,7 @@ async def track(ctx):
 
 # 🛡️ Команды модерации голосовых каналов
 @bot.command(name="мут")
-@commands.has_permissions(mute_members=True)
+@has_mod_role()
 async def mute_cmd(ctx, member: discord.Member):
     if is_protected(member):
         await ctx.send("Тск... Не собираюсь это делать с ним.")
@@ -362,7 +374,7 @@ async def mute_cmd(ctx, member: discord.Member):
 
 
 @bot.command(name="размут")
-@commands.has_permissions(mute_members=True)
+@has_mod_role()
 async def unmute_cmd(ctx, member: discord.Member):
     if not member.voice or not member.voice.channel:
         await ctx.send(f"{member.mention} сейчас не в голосовом канале.")
@@ -372,7 +384,7 @@ async def unmute_cmd(ctx, member: discord.Member):
 
 
 @bot.command(name="кик")
-@commands.has_permissions(move_members=True)
+@has_mod_role()
 async def voice_kick_cmd(ctx, member: discord.Member):
     if is_protected(member):
         await ctx.send("Тск... Не собираюсь это делать с ним.")
