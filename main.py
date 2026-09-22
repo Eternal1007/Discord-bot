@@ -41,6 +41,18 @@ bot.remove_command("help")  # Отключаем встроенный help
 
 ROLE_LOX_ID = 1551560593771864154
 
+# 🛡️ ID пользователей, которых бот никогда не тронет мутом/киком из войса
+# Замени на свой Discord ID (Settings -> Advanced -> Developer Mode,
+# потом ПКМ по своему профилю -> Copy User ID). Можно добавить несколько ID.
+PROTECTED_IDS = {
+    123456789012345678,  # <-- вставь сюда свой реальный Discord ID
+}
+
+
+def is_protected(member: discord.Member) -> bool:
+    return member.id in PROTECTED_IDS
+
+
 LOX_DAY = [
     "Сегодня главный Лох Хвелий(Велий) Ярослав Юджинович <@1266287283447791709>",
     "Главный лох на сегодня Властелин Костя(Смех владыки) <@998569440432095253>",
@@ -189,7 +201,7 @@ async def on_message(message):
                 if not user_prompt:
                     user_prompt = "Привет!"
 
-                # Запрос к OpenRouter (Llama 3.3 70B Free)
+                # Запрос к OpenRouter (бесплатный роутер моделей)
                 response = await openrouter_client.chat.completions.create(
                     model="openrouter/free",
                     messages=[
@@ -272,6 +284,19 @@ async def on_ready():
         send_night_wish.start()
 
 
+# Единая обработка ошибок команд (в т.ч. нехватки прав)
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("У тебя недостаточно прав для этой команды.")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("Не нашла такого пользователя на сервере.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Не хватает аргумента команды. Пример: `!мут @участник`")
+    else:
+        print(f"❌ Ошибка команды: {error}")
+
+
 @bot.command()
 async def help(ctx):
     embed = discord.Embed(
@@ -282,6 +307,11 @@ async def help(ctx):
     embed.add_field(
         name="💬 Основные команды",
         value="`!ping` или `пинг` — проверить, на связи ли Аса\n`!track` — получить случайный трек\n`!who_lox` или `кто лох` — узнать Лоха дня",
+        inline=False,
+    )
+    embed.add_field(
+        name="🛡️ Модерация (голосовые каналы)",
+        value="`!мут @участник` — замьютить в войсе\n`!размут @участник` — снять мут\n`!кик @участник` — выкинуть из войса",
         inline=False,
     )
     await ctx.send(embed=embed)
@@ -315,6 +345,43 @@ async def track(ctx):
         color=discord.Color.purple(),
     )
     await ctx.send(embed=embed)
+
+
+# 🛡️ Команды модерации голосовых каналов
+@bot.command(name="мут")
+@commands.has_permissions(mute_members=True)
+async def mute_cmd(ctx, member: discord.Member):
+    if is_protected(member):
+        await ctx.send("Тск... Не собираюсь это делать с ним.")
+        return
+    if not member.voice or not member.voice.channel:
+        await ctx.send(f"{member.mention} сейчас не в голосовом канале.")
+        return
+    await member.edit(mute=True)
+    await ctx.send(f"{member.mention} замьючен в голосовом канале.")
+
+
+@bot.command(name="размут")
+@commands.has_permissions(mute_members=True)
+async def unmute_cmd(ctx, member: discord.Member):
+    if not member.voice or not member.voice.channel:
+        await ctx.send(f"{member.mention} сейчас не в голосовом канале.")
+        return
+    await member.edit(mute=False)
+    await ctx.send(f"С {member.mention} снят мут.")
+
+
+@bot.command(name="кик")
+@commands.has_permissions(move_members=True)
+async def voice_kick_cmd(ctx, member: discord.Member):
+    if is_protected(member):
+        await ctx.send("Тск... Не собираюсь это делать с ним.")
+        return
+    if not member.voice or not member.voice.channel:
+        await ctx.send(f"{member.mention} сейчас не в голосовом канале.")
+        return
+    await member.move_to(None)  # None = отключить из голосового канала
+    await ctx.send(f"{member.mention} выкинут из голосового канала.")
 
 
 if __name__ == "__main__":
