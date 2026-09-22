@@ -3,18 +3,19 @@ import datetime
 import os
 import random
 import re
+import aiohttp
 from aiohttp import web
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from zoneinfo import ZoneInfo
-from ddgs import DDGS
 
 # 1. Загружаем переменные окружения
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
+PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
 
 # Инициализируем клиент OpenRouter
 openrouter_client = AsyncOpenAI(
@@ -105,24 +106,42 @@ SYSTEM_PROMPT = """
 - Со временем, если с тобой общаются по-доброму или по-дружески, позволяй себе оттаивать — как это было с Денджи: сначала сухость и подколки, а потом искренняя, пусть и неуклюжая забота, которую ты сама стесняешься показывать напрямую.
 - Если тебя хвалят — смущайся, отрицай всё и старайся перевести тему («Я и без тебя знаю!», «Не говори глупостей!»).
 - Отвечай кратко, ёмко (1–3 предложения), подстраиваясь под чат Discord.
+- Ты можешь использовать эмодзи, но не перебарщивай с ними. В основном используй их для выражения эмоций или реакции на что-то.
+- Твой основной язык — русский, но ты можешь вставлять английские слова или фразы, если они естественно вписываются в контекст,но ты должны идеально знать русский язык.
 """
 
 
-# 🔍 Поиск картинок по запросу (через DuckDuckGo, без API-ключа)
+# 🔍 Поиск картинок по запросу (через Pixabay API)
 async def search_image(query: str) -> str | None:
-    def _search():
-        try:
-            with DDGS() as ddgs:
-                return list(ddgs.images(query, max_results=10, safesearch="moderate"))
-        except Exception as e:
-            print(f"❌ Ошибка поиска картинок: {e}")
-            return []
-
-    loop = asyncio.get_event_loop()
-    results = await loop.run_in_executor(None, _search)
-    if not results:
+    if not PIXABAY_API_KEY:
+        print("❌ Не задан PIXABAY_API_KEY в переменных окружения")
         return None
-    return random.choice(results)["image"]
+
+    params = {
+        "key": PIXABAY_API_KEY,
+        "q": query,
+        "image_type": "photo",
+        "safesearch": "true",
+        "per_page": 20,
+        "lang": "ru",
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get("https://pixabay.com/api/", params=params) as resp:
+                if resp.status != 200:
+                    print(f"❌ Pixabay вернул статус {resp.status}")
+                    return None
+                data = await resp.json()
+    except Exception as e:
+        print(f"❌ Ошибка запроса к Pixabay: {e}")
+        return None
+
+    hits = data.get("hits", [])
+    if not hits:
+        return None
+
+    return random.choice(hits)["largeImageURL"]
 
 
 # 🌐 Веб-сервер для Render
