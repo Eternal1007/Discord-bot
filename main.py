@@ -191,7 +191,7 @@ async def on_message(message):
 
                 # Запрос к OpenRouter (Llama 3.3 70B Free)
                 response = await openrouter_client.chat.completions.create(
-                    model="meta-llama/llama-3.3-70b-instruct:free",
+                    model="openrouter/free",
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
