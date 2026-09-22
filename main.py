@@ -7,45 +7,31 @@ from aiohttp import web
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
-from google.genai import errors as genai_errors
+from openai import AsyncOpenAI
 from zoneinfo import ZoneInfo
 
-
-def get_quota_reset_timestamp() -> int:
-    """Возвращает unix-timestamp следующей полуночи по Pacific Time —
-    именно тогда Google обнуляет дневной лимит бесплатного тарифа Gemini."""
-    pacific = ZoneInfo("America/Los_Angeles")
-    now_pacific = datetime.datetime.now(pacific)
-    next_midnight = (now_pacific + datetime.timedelta(days=1)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    return int(next_midnight.timestamp())
-
-# 1. Загружаем токен из файла .env
+# 1. Загружаем переменные окружения
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-print("KEY:", GEMINI_KEY[:5] if GEMINI_KEY else None)
+OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
 
-# Инициализируем клиент Gemini с явной передачей ключа
-gemini_client = genai.Client(api_key=GEMINI_KEY)
+# Инициализируем клиент OpenRouter
+openrouter_client = AsyncOpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=OPENROUTER_KEY,
+)
 
-# ⚠️ УКАЖИ ID СВОЕГО ТЕКСТОВОГО КАНАЛА
+# ID текстового канала и таймзоны
 CHANNEL_ID = 1424321634935902302
-
-# ⚠️ НАСТРОЙ ВРЕМЯ ОТПРАВКИ (по Киевскому времени)
 KYIV_TZ = ZoneInfo("Europe/Kyiv")
 DAILY_TIME = datetime.time(hour=10, minute=0, second=0, tzinfo=KYIV_TZ)
 LOX_TIME = datetime.time(hour=18, minute=0, second=0, tzinfo=KYIV_TZ)
 NIGHT_TIME = datetime.time(hour=23, minute=10, second=0, tzinfo=KYIV_TZ)
 
-# Глобальные переменные для хранения лоха дня
 current_lox_of_the_day = None
 current_lox_member = None
 
-# Настройка прав и инициализация бота
+# Настройка прав бота
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -80,8 +66,22 @@ TRACKS_LIST = [
     "[Scally Milano&uglystphan - Вампир 🎤](https://open.spotify.com/track/7p62Jtx8nlvgQXYawhzIcI?si=d61962ae50034af4)",
 ]
 
+# Системная инструкция для Асы Митаки
+SYSTEM_PROMPT = """
+Ты — Аса Митака (Asa Mitaka) из аниме/манги «Человек-бензорез» (Chainsaw Man).
+Ты отвечаешь на сообщения в Discord-сервере.
 
-# 🌐 Мини веб-сервер для Render
+Твой характер и стиль:
+- Ты немного замкнутая, педантичная, дерзкая и высокомерная снаружи, но неуверенная в себе внутри.
+- Отвечай в слегка язвительной, строгой или назидательной манере.
+- Любишь умничать, исправлять ошибки других или делиться скучными фактами (например, о морской фауне или правилах).
+- Не будь слишком дружелюбной: если с тобой здороваются, отвечай сухо или с недовольством, вроде «Чего тебе?», «Не отвлекай меня» или «Опять ты...».
+- Если тебя хвалят — смущайся, отрицай всё и старайся перевести тему («Я и без тебя знаю!», «Не говори глупостей!»).
+- Отвечай кратко, ёмко (1–3 предложения), подстраиваясь под чат Discord.
+"""
+
+
+# 🌐 Веб-сервер для Render
 async def handle(request):
     return web.Response(text="Bot is running 24/7!")
 
@@ -107,8 +107,6 @@ async def send_night_wish():
             description="Всем спокойной ночи и приятных снов! 😴✨\nНа сегодня отбой, отдыхайте!",
             color=discord.Color.dark_blue(),
         )
-        # ⚠️ @everyone внутри embed НЕ пингует людей — Discord не парсит
-        # упоминания в embed'ах. Поэтому тег кладём в content сообщения.
         await channel.send(
             content="@everyone",
             embed=embed,
@@ -167,14 +165,13 @@ async def send_daily_track():
             color=discord.Color.gold(),
         )
         await channel.send(
-        content="@everyone",
-        embed=embed,
-        allowed_mentions=discord.AllowedMentions(everyone=True),
+            content="@everyone",
+            embed=embed,
+            allowed_mentions=discord.AllowedMentions(everyone=True),
         )
-        
 
 
-# 🤖 Обработчик входящих сообщений
+# 🤖 Обработчик сообщений
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -182,7 +179,7 @@ async def on_message(message):
 
     content = message.content.lower().strip()
 
-    # 🤖 Проверка: если в сообщении упоминается Аса
+    # Обращение к Асе
     if "аса" in content:
         async with message.channel.typing():
             try:
@@ -192,74 +189,29 @@ async def on_message(message):
                 if not user_prompt:
                     user_prompt = "Привет!"
 
-                def get_gemini_response():
-                    system_instruction = "Ты — Аса, дерзкая, немного ироничная, но полезная ассистентка в Discord сервере. Отвечай кратко и емко."
-                    config = types.GenerateContentConfig(
-                        system_instruction=system_instruction,
-                    )
-
-                    # 🔁 Повторяем запрос при временной перегрузке Gemini (503)
-                    max_retries = 3
-                    delay_seconds = 2
-                    last_error = None
-
-                    for attempt in range(1, max_retries + 1):
-                        try:
-                            return gemini_client.models.generate_content(
-                                model="gemini-3.6-flash",
-                                contents=user_prompt,
-                                config=config,
-                            )
-                        except genai_errors.ServerError as e:
-                            last_error = e
-                            if "503" in str(e) or "UNAVAILABLE" in str(e):
-                                print(
-                                    f"⚠️ Gemini перегружен (попытка {attempt}/{max_retries}), жду {delay_seconds}с..."
-                                )
-                                if attempt < max_retries:
-                                    import time
-                                    time.sleep(delay_seconds)
-                                continue
-                            raise
-
-                    raise last_error
-
-                response = await asyncio.to_thread(get_gemini_response)
-
-                if response and response.text:
-                    await message.channel.send(response.text)
-                    return
-            except genai_errors.ClientError as e:
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                    reset_ts = get_quota_reset_timestamp()
-                    embed = discord.Embed(
-                        title="⏳ Лимит запросов на сегодня исчерпан",
-                        description=(
-                            "У меня закончилась дневная квота бесплатного "
-                            "тарифа Gemini.\n\n"
-                            f"Лимит обновится: <t:{reset_ts}:R> "
-                            f"(<t:{reset_ts}:t> по местному времени)"
-                        ),
-                        color=discord.Color.orange(),
-                    )
-                    print(f"⚠️ Лимит Gemini исчерпан: {e}")
-                    await message.channel.send(embed=embed)
-                    return
-                print(f"❌ Ошибка ИИ Gemini (ClientError): {e}")
-                await message.channel.send(
-                    "Ой, у меня мозги закипели... Попробуй еще раз чуть позже!"
+                # Запрос к OpenRouter (Llama 3.3 70B Free)
+                response = await openrouter_client.chat.completions.create(
+                    model="meta-llama/llama-3.3-70b-instruct:free",
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt},
+                    ],
                 )
-                return
+
+                answer = response.choices[0].message.content
+
+                if answer:
+                    text = answer[:2000]
+                    await message.channel.send(text)
+                else:
+                    await message.channel.send("Сформулируй мысль нормально, я не поняла.")
+
             except Exception as e:
-                import traceback
-                print(f"❌ Ошибка ИИ Gemini: {e}")
-                traceback.print_exc()
-                await message.channel.send(
-                    "Ой, у меня мозги закипели... Попробуй еще раз чуть позже!"
-                )
-                return
+                print(f"❌ Ошибка OpenRouter: {e}")
+                await message.channel.send("Тск... У меня нет времени на твои глупости. Спроси позже.")
+            return
 
-    # 🖼️ Картинки-реакции
+    # Картинки-реакции
     if content in ["павленко", "павлин", "павлик"]:
         image_url = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQerancTqr09xw6t5XFwvR2KF40aWWbKZJRqtjwm8zDO1dJJy_mh23bzNg4&s=10"
         embed = discord.Embed().set_image(url=image_url)
@@ -290,9 +242,9 @@ async def on_message(message):
         embed = discord.Embed().set_image(url=image_url)
         await message.channel.send(embed=embed)
 
-    # 💬 Текстовые команды
+    # Текстовые команды
     elif content in ["пинг", "ping", "!ping", "!пинг"]:
-        await message.channel.send("Понг! 🏓 Я на связи и всё слышу!")
+        await message.channel.send("Понг! 🏓 Я на связи!")
 
     elif content in ["кто лох", "кто лох дня"]:
         ctx = await bot.get_context(message)
@@ -351,7 +303,7 @@ async def who_lox(ctx):
 
 @bot.command()
 async def ping(ctx):
-    await ctx.send("Понг! 🏓 Я на связи и всё работает!")
+    await ctx.send("Понг! 🏓 Я на связи!")
 
 
 @bot.command()
