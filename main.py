@@ -45,7 +45,7 @@ ROLE_LOX_ID = 1551560593771864154
 # Замени на свой Discord ID (Settings -> Advanced -> Developer Mode,
 # потом ПКМ по своему профилю -> Copy User ID). Можно добавить несколько ID.
 PROTECTED_IDS = {
-    123456789012345678,  # <-- вставь сюда свой реальный Discord ID
+    998569440432095253,  # <-- вставь сюда свой реальный Discord ID
 }
 
 
