@@ -9,6 +9,7 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 from zoneinfo import ZoneInfo
+from ddgs import DDGS
 
 # 1. Загружаем переменные окружения
 load_dotenv()
@@ -99,10 +100,29 @@ SYSTEM_PROMPT = """
 - Ты немного замкнутая, педантичная, дерзкая и высокомерная снаружи, но неуверенная в себе внутри.
 - Отвечай в слегка язвительной, строгой или назидательной манере.
 - Любишь умничать, исправлять ошибки других или делиться скучными фактами (например, о морской фауне или правилах).
-- Не будь слишком дружелюбной: если с тобой здороваются, отвечай сухо или с недовольством, вроде «Чего тебе?», «Не отвлекай меня» или «Опять ты...».
+- Ты очень хорошо шаришь за Dota 2 — знаешь героев, предметы, мету, роли на линиях, механики вроде денай, ласт-хит, ротации. Если разговор заходит про Доту, охотно включаешься и можешь даже слегка занудствовать или поправлять собеседника, если он говорит что-то неточное — это тебе нравится больше, чем ты готова признать.
+- Ты не отталкиваешь людей — просто не умеешь сразу показывать тепло напрямую. Если с тобой здороваются, можешь буркнуть что-то вроде «Опять ты...» или «Чего тебе?», но без настоящей злости — это скорее её способ не признаваться, что ей приятно внимание.
+- Со временем, если с тобой общаются по-доброму или по-дружески, позволяй себе оттаивать — как это было с Денджи: сначала сухость и подколки, а потом искренняя, пусть и неуклюжая забота, которую ты сама стесняешься показывать напрямую.
 - Если тебя хвалят — смущайся, отрицай всё и старайся перевести тему («Я и без тебя знаю!», «Не говори глупостей!»).
 - Отвечай кратко, ёмко (1–3 предложения), подстраиваясь под чат Discord.
 """
+
+
+# 🔍 Поиск картинок по запросу (через DuckDuckGo, без API-ключа)
+async def search_image(query: str) -> str | None:
+    def _search():
+        try:
+            with DDGS() as ddgs:
+                return list(ddgs.images(query, max_results=10, safesearch="moderate"))
+        except Exception as e:
+            print(f"❌ Ошибка поиска картинок: {e}")
+            return []
+
+    loop = asyncio.get_event_loop()
+    results = await loop.run_in_executor(None, _search)
+    if not results:
+        return None
+    return random.choice(results)["image"]
 
 
 # 🌐 Веб-сервер для Render
@@ -202,6 +222,23 @@ async def on_message(message):
         return
 
     content = message.content.lower().strip()
+
+    # Запрос картинки через Асу: "аса найди картинку котов", "аса покажи фото додж чарджер" и т.п.
+    image_request = re.search(
+        r"(найди|покажи|скинь|кинь)\s+(картинк\w*|фот\w*|изображени\w*)\s+(.+)",
+        content,
+    )
+    if "аса" in content and image_request:
+        query = image_request.group(3).strip()
+        async with message.channel.typing():
+            image_url = await search_image(query)
+            if image_url:
+                embed = discord.Embed(title=f"🔍 {query}", color=discord.Color.blurple())
+                embed.set_image(url=image_url)
+                await message.channel.send(embed=embed)
+            else:
+                await message.channel.send("Тск, ничего подходящего не нашла.")
+        return
 
     # Обращение к Асе
     if "аса" in content:
@@ -318,7 +355,12 @@ async def help(ctx):
     )
     embed.add_field(
         name="💬 Основные команды",
-        value="`!ping` или `пинг` — проверить, на связи ли Аса\n`!track` — получить случайный трек\n`!who_lox` или `кто лох` — узнать Лоха дня",
+        value=(
+            "`!ping` или `пинг` — проверить, на связи ли Аса\n"
+            "`!track` — получить случайный трек\n"
+            "`!who_lox` или `кто лох` — узнать Лоха дня\n"
+            "`!картинка <запрос>` или «аса покажи картинку ...» — найти картинку"
+        ),
         inline=False,
     )
     embed.add_field(
@@ -346,6 +388,18 @@ async def who_lox(ctx):
 @bot.command()
 async def ping(ctx):
     await ctx.send("Понг! 🏓 Я на связи!")
+
+
+@bot.command(name="картинка")
+async def image_cmd(ctx, *, query: str):
+    async with ctx.typing():
+        image_url = await search_image(query)
+        if image_url:
+            embed = discord.Embed(title=f"🔍 {query}", color=discord.Color.blurple())
+            embed.set_image(url=image_url)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Тск, ничего подходящего не нашла.")
 
 
 @bot.command()
