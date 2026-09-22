@@ -8,7 +8,7 @@ from aiohttp import web
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 from zoneinfo import ZoneInfo
 
 # 1. Загружаем переменные окружения
@@ -286,6 +286,11 @@ async def on_message(message):
                 else:
                     await message.channel.send("Сформулируй мысль нормально, я не поняла.")
 
+            except RateLimitError:
+                await message.channel.send(
+                    "Тск... На сегодня у меня закончился лимит бесплатных ответов. "
+                    "Загляни завтра, лимит обновится."
+                )
             except Exception as e:
                 print(f"❌ Ошибка OpenRouter: {e}")
                 await message.channel.send("Тск... У меня нет времени на твои глупости. Спроси позже.")
