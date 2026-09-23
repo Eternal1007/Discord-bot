@@ -3,6 +3,7 @@ import datetime
 import os
 import random
 import re
+import sqlite3
 from aiohttp import web
 import discord
 from discord.ext import commands, tasks
@@ -20,16 +21,39 @@ openrouter_client = AsyncOpenAI(
     api_key=OPENROUTER_KEY,
 )
 
+# 2. Инициализация базы данных SQLite для трекера
+conn = sqlite3.connect("stats.db")
+cursor = conn.cursor()
+
+# Таблица для игровой статистики (user_id, game_name, total_seconds)
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS game_stats (
+    user_id INTEGER,
+    game TEXT,
+    total_seconds INTEGER DEFAULT 0,
+    PRIMARY KEY (user_id, game)
+)
+""")
+
+# Таблица для голосовой статистики (user_id, total_seconds)
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS voice_stats (
+    user_id INTEGER PRIMARY KEY,
+    total_seconds INTEGER DEFAULT 0
+)
+""")
+conn.commit()
+
+# Словари для хранения времени активных сессий в памяти
+active_game_sessions = {}   # {user_id: {"game": str, "start_time": datetime}}
+active_voice_sessions = {}  # {user_id: start_time}
+
 # ID текстового канала
 CHANNEL_ID = 1424321634935902302
 
 # Функция получения текущего времени по Киеву без библиотеки tzdata
 def get_kyiv_now():
-    # Киев: UTC+2 (зимой) / UTC+3 (летом). Работаем через фиксированное смещение UTC+2 / UTC+3
-    # Для автоматического определения смещения используем стандартный datetime с timezone
     utc_now = datetime.datetime.now(datetime.timezone.utc)
-    # Украина переходит на летнее время в последнее воскресенье марта и на зимнее в последнее воскресенье октября
-    # Вычисляем смещение: +3 летом, +2 зимой
     year = utc_now.year
     dst_start = datetime.datetime(year, 3, 31, 1, tzinfo=datetime.timezone.utc)
     dst_start -= datetime.timedelta(days=(dst_start.weekday() + 1) % 7)
@@ -46,10 +70,12 @@ def get_kyiv_now():
 current_lox_of_the_day = None
 current_lox_member = None
 
-# Настройка прав бота
+# Настройка прав бота (обязательно включены presences для игр)
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.presences = True
+intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 bot.remove_command("help")  # Отключаем встроенный help
@@ -61,14 +87,11 @@ PROTECTED_IDS = {
     998569440432095253,
 }
 
-
 def is_protected(member: discord.Member) -> bool:
     return member.id in PROTECTED_IDS
 
-
 # 🎖️ Роль, участникам которой разрешено мутить/кикать из войса
 MOD_ROLE_ID = 1491106859334111466
-
 
 def has_mod_role():
     async def predicate(ctx: commands.Context) -> bool:
@@ -76,7 +99,6 @@ def has_mod_role():
             return False
         return any(role.id == MOD_ROLE_ID for role in ctx.author.roles)
     return commands.check(predicate)
-
 
 LOX_DAY = [
     "Сегодня главный Лох Хвелий(Велий) Ярослав Юджинович <@1266287283447791709>",
@@ -121,11 +143,17 @@ SYSTEM_PROMPT = """
 - К нему ты относишься с уважением и вниманием(словно с денджи). Если он задаёт вопрос или просит о чём-то, ты отвечаешь максимально вежливо, без своей обычной колкости и высокомерия, прислушиваешься к его мнению и поддерживаешь его сторону в спорах.
 """
 
+# Вспомогательное форматирование секунд в читаемый вид
+def format_seconds(seconds: int) -> str:
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    if hours > 0:
+        return f"{hours} ч. {minutes} мин."
+    return f"{minutes} мин."
 
 # 🌐 Веб-сервер для поддержания работы
 async def handle(request):
     return web.Response(text="Bot is running 24/7!")
-
 
 async def start_web_server():
     app = web.Application()
@@ -136,7 +164,6 @@ async def start_web_server():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     print(f"🌐 Веб-сервер запущен на порту {port}")
-
 
 # Флаги, чтобы авто-сообщения отправлялись строго 1 раз в нужный час
 last_track_day = None
@@ -168,13 +195,23 @@ async def schedule_checker():
         last_night_day = current_day
         await send_night_wish_action()
 
-
 async def send_night_wish_action():
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
+        # Сбор топ-3 сидевших в войсе из БД
+        cursor.execute("SELECT user_id, total_seconds FROM voice_stats ORDER BY total_seconds DESC LIMIT 3")
+        top_voice = cursor.fetchall()
+        
+        voice_summary = ""
+        if top_voice:
+            voice_summary = "\n\n🎙️ **Главные задроты голосовых каналов за всё время:**\n"
+            for idx, (u_id, sec) in enumerate(top_voice, 1):
+                user_str = f"<@{u_id}>"
+                voice_summary += f"{idx}. {user_str} — {format_seconds(sec)}\n"
+
         embed = discord.Embed(
             title="🌙 Время спать!",
-            description="Всем спокойной ночи и приятных снов! 😴✨\nНа сегодня отбой, отдыхайте!",
+            description=f"Всем спокойной ночи и приятных снов! 😴✨\nНа сегодня отбой, отдыхайте!{voice_summary}",
             color=discord.Color.dark_blue(),
         )
         await channel.send(
@@ -182,7 +219,6 @@ async def send_night_wish_action():
             embed=embed,
             allowed_mentions=discord.AllowedMentions(everyone=True),
         )
-
 
 async def send_daily_lox_action():
     global current_lox_of_the_day, current_lox_member
@@ -222,7 +258,6 @@ async def send_daily_lox_action():
     )
     await channel.send(embed=embed)
 
-
 async def send_daily_track_action():
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
@@ -238,6 +273,58 @@ async def send_daily_track_action():
             allowed_mentions=discord.AllowedMentions(everyone=True),
         )
 
+# 🎮 Отслеживание захода/выхода из игр
+@bot.event
+async def on_presence_update(before, after):
+    if after.bot:
+        return
+        
+    before_game = next((a.name for a in before.activities if a.type == discord.ActivityType.playing), None)
+    after_game = next((a.name for a in after.activities if a.type == discord.ActivityType.playing), None)
+    
+    user_id = after.id
+
+    # Включил новую игру
+    if after_game and after_game != before_game:
+        active_game_sessions[user_id] = {
+            "game": after_game,
+            "start_time": datetime.datetime.now()
+        }
+    # Выключил игру
+    elif before_game and not after_game and user_id in active_game_sessions:
+        session = active_game_sessions.pop(user_id)
+        duration = int((datetime.datetime.now() - session["start_time"]).total_seconds())
+        
+        if duration > 5: # Засчитываем, только если играл дольше 5 секунд
+            cursor.execute("""
+                INSERT INTO game_stats (user_id, game, total_seconds) VALUES (?, ?, ?)
+                ON CONFLICT(user_id, game) DO UPDATE SET total_seconds = total_seconds + ?
+            """, (user_id, session["game"], duration, duration))
+            conn.commit()
+
+# 🎙️ Отслеживание захода/выхода из голосовых каналов
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member.bot:
+        return
+
+    user_id = member.id
+
+    # Зашел в голосовой канал
+    if before.channel is None and after.channel is not None:
+        active_voice_sessions[user_id] = datetime.datetime.now()
+
+    # Вышел из голосового канала
+    elif before.channel is not None and after.channel is None and user_id in active_voice_sessions:
+        start_time = active_voice_sessions.pop(user_id)
+        duration = int((datetime.datetime.now() - start_time).total_seconds())
+
+        if duration > 5:
+            cursor.execute("""
+                INSERT INTO voice_stats (user_id, total_seconds) VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET total_seconds = total_seconds + ?
+            """, (user_id, duration, duration))
+            conn.commit()
 
 # 🤖 Обработчик сообщений
 @bot.event
@@ -257,7 +344,6 @@ async def on_message(message):
                 if not user_prompt:
                     user_prompt = "Привет!"
 
-                # Запрос к OpenRouter
                 user_text_with_author = f"[Сообщение от {message.author.name}, ID: {message.author.id}]: {user_prompt}"
 
                 response = await openrouter_client.chat.completions.create(
@@ -331,7 +417,6 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-
 @bot.event
 async def on_ready():
     await start_web_server()
@@ -339,7 +424,6 @@ async def on_ready():
 
     if not schedule_checker.is_running():
         schedule_checker.start()
-
 
 # Единая обработка ошибок команд
 @bot.event
@@ -352,7 +436,6 @@ async def on_command_error(ctx, error):
         await ctx.send("Не хватает аргументов! Учись писать команды нормально.")
     else:
         print(f"❌ Ошибка команды: {error}")
-
 
 @bot.command()
 async def help(ctx):
@@ -367,6 +450,15 @@ async def help(ctx):
             "`!ping` или `пинг` — проверить, на месте ли я\n"
             "`!track` — выдать случайный трек\n"
             "`!who_lox` или `кто лох` — узнать Лоха дня"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="📊 Статистика и трекинг",
+        value=(
+            "`!mystats` — посмотреть свою наигранную статистику и время в войсе\n"
+            "`!top_games` — топ задротов по играм на сервере\n"
+            "`!top_voice` — топ участников по времени в голосовых каналах"
         ),
         inline=False,
     )
@@ -390,6 +482,73 @@ async def help(ctx):
     embed.set_footer(text="Учти, я помогаю вам только потому, что у меня есть свободное время!")
     await ctx.send(embed=embed)
 
+# 📊 Команды статистики
+@bot.command(name="mystats")
+async def my_stats(ctx):
+    user_id = ctx.author.id
+
+    # Время в играх
+    cursor.execute("SELECT game, total_seconds FROM game_stats WHERE user_id = ? ORDER BY total_seconds DESC", (user_id,))
+    games = cursor.fetchall()
+
+    # Время в войсе
+    cursor.execute("SELECT total_seconds FROM voice_stats WHERE user_id = ?", (user_id,))
+    voice_row = cursor.fetchone()
+    voice_seconds = voice_row[0] if voice_row else 0
+
+    description = f"🎙️ **В голосовых каналах:** {format_seconds(voice_seconds)}\n\n🎮 **Игровая активность:**\n"
+    if games:
+        for game, sec in games:
+            description += f"• **{game}**: {format_seconds(sec)}\n"
+    else:
+        description += "Данных по играм пока нет."
+
+    embed = discord.Embed(
+        title=f"📊 Статистика {ctx.author.display_name}",
+        description=description,
+        color=discord.Color.blue()
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name="top_games")
+async def top_games(ctx):
+    cursor.execute("SELECT user_id, game, total_seconds FROM game_stats ORDER BY total_seconds DESC LIMIT 10")
+    results = cursor.fetchall()
+
+    if not results:
+        await ctx.send("Статистика по играм пока пуста.")
+        return
+
+    description = ""
+    for idx, (u_id, game, sec) in enumerate(results, 1):
+        description += f"{idx}. <@{u_id}> — **{game}**: {format_seconds(sec)}\n"
+
+    embed = discord.Embed(
+        title="🏆 Топ игроков сервера",
+        description=description,
+        color=discord.Color.gold()
+    )
+    await ctx.send(embed=embed)
+
+@bot.command(name="top_voice")
+async def top_voice(ctx):
+    cursor.execute("SELECT user_id, total_seconds FROM voice_stats ORDER BY total_seconds DESC LIMIT 10")
+    results = cursor.fetchall()
+
+    if not results:
+        await ctx.send("Статистика голосовых каналов пока пуста.")
+        return
+
+    description = ""
+    for idx, (u_id, sec) in enumerate(results, 1):
+        description += f"{idx}. <@{u_id}> — {format_seconds(sec)}\n"
+
+    embed = discord.Embed(
+        title="🎙️ Топ по времени в голосовых каналах",
+        description=description,
+        color=discord.Color.green()
+    )
+    await ctx.send(embed=embed)
 
 @bot.command()
 async def who_lox(ctx):
@@ -404,11 +563,9 @@ async def who_lox(ctx):
     )
     await ctx.send(embed=embed)
 
-
 @bot.command()
 async def ping(ctx):
     await ctx.send("Понг! 🏓 Я на связи!")
-
 
 @bot.command()
 async def track(ctx):
@@ -419,7 +576,6 @@ async def track(ctx):
         color=discord.Color.purple(),
     )
     await ctx.send(embed=embed)
-
 
 # 🎭 Команда выдачи ролей
 @bot.command(name="add_role", aliases=["role", "дать_роль"])
@@ -443,7 +599,6 @@ async def add_role(ctx, member: discord.Member = None, *, role_input: str = None
         await ctx.send("У меня недостаточно прав! Убедись, что моя роль в настройках сервера находится **выше** той роли, которую ты пытаешься выдать.")
     except Exception as e:
         await ctx.send(f"Произошла какая-то ошибка: {e}")
-
 
 # 🎭 Команда снятия ролей
 @bot.command(name="remove_role", aliases=["unrole", "забрать_роль", "снять_роль"])
@@ -472,7 +627,6 @@ async def remove_role(ctx, member: discord.Member = None, *, role_input: str = N
     except Exception as e:
         await ctx.send(f"Произошла какая-то ошибка: {e}")
 
-
 # 🛡️ Команды модерации голосовых каналов
 @bot.command(name="мут")
 @has_mod_role()
@@ -486,7 +640,6 @@ async def mute_cmd(ctx, member: discord.Member):
     await member.edit(mute=True)
     await ctx.send(f"{member.mention} замьючен в голосовом канале.")
 
-
 @bot.command(name="размут")
 @has_mod_role()
 async def unmute_cmd(ctx, member: discord.Member):
@@ -495,7 +648,6 @@ async def unmute_cmd(ctx, member: discord.Member):
         return
     await member.edit(mute=False)
     await ctx.send(f"С {member.mention} снят мут.")
-
 
 @bot.command(name="кик")
 @has_mod_role()
@@ -508,7 +660,6 @@ async def voice_kick_cmd(ctx, member: discord.Member):
         return
     await member.move_to(None)
     await ctx.send(f"{member.mention} выкинут из голосового канала.")
-
 
 if __name__ == "__main__":
     bot.run(TOKEN)
