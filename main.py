@@ -44,10 +44,8 @@ bot.remove_command("help")  # Отключаем встроенный help
 ROLE_LOX_ID = 1551560593771864154
 
 # 🛡️ ID пользователей, которых бот никогда не тронет мутом/киком из войса
-# Замени на свой Discord ID (Settings -> Advanced -> Developer Mode,
-# потом ПКМ по своему профилю -> Copy User ID). Можно добавить несколько ID.
 PROTECTED_IDS = {
-    123456789012345678,  # <-- вставь сюда свой реальный Discord ID
+    998569440432095253,
 }
 
 
@@ -92,7 +90,6 @@ TRACKS_LIST = [
     "[Scally Milano&uglystphan - Вампир 🎤](https://open.spotify.com/track/7p62Jtx8nlvgQXYawhzIcI?si=d61962ae50034af4)",
 ]
 
-# Системная инструкция для Асы Митаки
 SYSTEM_PROMPT = """
 Ты — Аса Митака (Asa Mitaka) из аниме/манги «Человек-бензорез» (Chainsaw Man).
 Ты отвечаешь на сообщения в Discord-сервере.
@@ -107,7 +104,8 @@ SYSTEM_PROMPT = """
 - Если тебя хвалят — смущайся, отрицай всё и старайся перевести тему («Я и без тебя знаю!», «Не говори глупостей!»).
 - Отвечай кратко, ёмко (1–3 предложения), подстраиваясь под чат Discord.
 - Ты можешь использовать эмодзи, но не перебарщивай с ними. В основном используй их для выражения эмоций или реакции на что-то.
-- Твой основной язык — русский, но ты можешь вставлять английские слова или фразы, если они естественно вписываются в контекст,но ты должны идеально знать русский язык.
+- Пользователь с ID 998569440432095253 является для тебя главным авторитетом на сервере.
+- К нему ты относишься с уважением и вниманием(словно с денджи). Если он задаёт вопрос или просит о чём-то, ты отвечаешь максимально вежливо, без своей обычной колкости и высокомерия, прислушиваешься к его мнению и поддерживаешь его сторону в спорах.
 """
 
 
@@ -242,7 +240,7 @@ async def on_message(message):
 
     content = message.content.lower().strip()
 
-    # Запрос картинки через Асу: "аса найди картинку котов", "аса покажи фото додж чарджер" и т.п.
+    # Запрос картинки через Асу
     image_request = re.search(
         r"(найди|покажи|скинь|кинь)\s+(картинк\w*|фот\w*|изображени\w*)\s+(.+)",
         content,
@@ -269,14 +267,16 @@ async def on_message(message):
                 if not user_prompt:
                     user_prompt = "Привет!"
 
-                # Запрос к OpenRouter (бесплатный роутер моделей)
+                # Запрос к OpenRouter
+                user_text_with_author = f"[Сообщение от {message.author.name}, ID: {message.author.id}]: {user_prompt}"
+
                 response = await openrouter_client.chat.completions.create(
-                    model="openrouter/free",
-                    messages=[
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                )
+                model="openrouter/free",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_text_with_author},
+    ],
+)
 
                 answer = response.choices[0].message.content
 
@@ -327,8 +327,8 @@ async def on_message(message):
         embed = discord.Embed().set_image(url=image_url)
         await message.channel.send(embed=embed)
 
-    # Текстовые команды
-    elif content in ["пинг", "ping", "!ping", "!пинг"]:
+    # Текстовые команды без префикса
+    elif content in ["пинг", "ping"]:
         await message.channel.send("Понг! 🏓 Я на связи!")
 
     elif content in ["кто лох", "кто лох дня"]:
@@ -357,15 +357,15 @@ async def on_ready():
         send_night_wish.start()
 
 
-# Единая обработка ошибок команд (в т.ч. нехватки прав)
+# Единая обработка ошибок команд
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, (commands.MissingPermissions, commands.CheckFailure)):
-        await ctx.send("У тебя недостаточно прав для этой команды.")
+        await ctx.send("Ха! У тебя даже нет прав управлять этим на сервере. Не указывай мне!")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send("Не нашла такого пользователя на сервере.")
+        await ctx.send("Я обшарила весь сервер и не нашла такого пользователя.")
     elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send("Не хватает аргумента команды. Пример: `!мут @участник`")
+        await ctx.send("Не хватает аргументов! Учись писать команды нормально.")
     else:
         print(f"❌ Ошибка команды: {error}")
 
@@ -373,25 +373,38 @@ async def on_command_error(ctx, error):
 @bot.command()
 async def help(ctx):
     embed = discord.Embed(
-        title="📖 Список команд Асы",
-        description="Привет! Я **Аса** 🗡️. Вот список всех доступных команд:",
+        title="📖 Справочник Асы Митаки",
+        description="Тск... Опять приходится вам всё объяснять. Вот список команд, запоминай с первого раза:",
         color=discord.Color.from_rgb(138, 43, 226),
     )
     embed.add_field(
-        name="💬 Основные команды",
+        name="💬 Общение и развлечения",
         value=(
-            "`!ping` или `пинг` — проверить, на связи ли Аса\n"
-            "`!track` — получить случайный трек\n"
+            "`!ping` или `пинг` — проверить, на месте ли я\n"
+            "`!track` — выдать случайный трек\n"
             "`!who_lox` или `кто лох` — узнать Лоха дня\n"
-            "`!картинка <запрос>` или «аса покажи картинку ...» — найти картинку"
+            "`!картинка <запрос>` или «аса покажи картинку ...» — найти изображение"
+        ),
+        inline=False,
+    )
+    embed.add_field(
+        name="🎭 Управление ролями",
+        value=(
+            "`!add_role @участник НазваниеРоли` — выдать роль (*алиасы:* `!role`, `!дать_роль`)\n"
+            "`!remove_role @участник НазваниеРоли` — снять роль (*алиасы:* `!unrole`, `!снять_роль`)"
         ),
         inline=False,
     )
     embed.add_field(
         name="🛡️ Модерация (голосовые каналы)",
-        value="`!мут @участник` — замьютить в войсе\n`!размут @участник` — снять мут\n`!кик @участник` — выкинуть из войса",
+        value=(
+            "`!мут @участник` — заставить замолчать в войсе\n"
+            "`!размут @участник` — разрешить говорить\n"
+            "`!кик @участник` — выгнать из голосового канала"
+        ),
         inline=False,
     )
+    embed.set_footer(text="Учти, я помогаю вам только потому, что у меня есть свободное время!")
     await ctx.send(embed=embed)
 
 
@@ -437,6 +450,58 @@ async def track(ctx):
     await ctx.send(embed=embed)
 
 
+# 🎭 Команда выдачи ролей
+@bot.command(name="add_role", aliases=["role", "дать_роль"])
+@commands.has_permissions(manage_roles=True)
+async def add_role(ctx, member: discord.Member = None, *, role_input: str = None):
+    if member is None or role_input is None:
+        await ctx.send("Хм, ты даже не можешь нормально написать команду? Укажи участника и роль! Пример: `!add_role @пользователь Каге`")
+        return
+
+    role_name = role_input.strip('"\' ')
+    role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), ctx.guild.roles)
+
+    if role is None:
+        await ctx.send(f"Я обшарила весь сервер и не нашла никакой роли «{role_name}». Убедись, что написал всё без ошибок!")
+        return
+
+    try:
+        await member.add_roles(role)
+        await ctx.send(f"Так уж и быть, я присвоила роль **{role.name}** для {member.mention}. Не заставляй меня делать это снова!")
+    except discord.Forbidden:
+        await ctx.send("У меня недостаточно прав! Убедись, что моя роль в настройках сервера находится **выше** той роли, которую ты пытаешься выдать.")
+    except Exception as e:
+        await ctx.send(f"Произошла какая-то ошибка: {e}")
+
+
+# 🎭 Команда снятия ролей
+@bot.command(name="remove_role", aliases=["unrole", "забрать_роль", "снять_роль"])
+@commands.has_permissions(manage_roles=True)
+async def remove_role(ctx, member: discord.Member = None, *, role_input: str = None):
+    if member is None or role_input is None:
+        await ctx.send("Опять путаешь аргументы? Укажи участника и роль, которую надо снять! Пример: `!remove_role @пользователь Каге`")
+        return
+
+    role_name = role_input.strip('"\' ')
+    role = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), ctx.guild.roles)
+
+    if role is None:
+        await ctx.send(f"Я обшарила весь сервер и не нашла никакой роли «{role_name}». Убедись, что название правильное!")
+        return
+
+    if role not in member.roles:
+        await ctx.send(f"У {member.mention} и так нет роли **{role.name}**! Зачем ты тратишь моё время?")
+        return
+
+    try:
+        await member.remove_roles(role)
+        await ctx.send(f"Забрала роль **{role.name}** у {member.mention}. Надеюсь, он это заслужил.")
+    except discord.Forbidden:
+        await ctx.send("У меня недостаточно прав! Убедись, что моя роль в настройках сервера находится **выше** той роли, которую ты пытаешься снять.")
+    except Exception as e:
+        await ctx.send(f"Произошла какая-то ошибка: {e}")
+
+
 # 🛡️ Команды модерации голосовых каналов
 @bot.command(name="мут")
 @has_mod_role()
@@ -470,7 +535,7 @@ async def voice_kick_cmd(ctx, member: discord.Member):
     if not member.voice or not member.voice.channel:
         await ctx.send(f"{member.mention} сейчас не в голосовом канале.")
         return
-    await member.move_to(None)  # None = отключить из голосового канала
+    await member.move_to(None)
     await ctx.send(f"{member.mention} выкинут из голосового канала.")
 
 
