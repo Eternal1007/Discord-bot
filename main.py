@@ -1,21 +1,18 @@
-import asyncio
+#import asyncio
 import datetime
 import os
 import random
 import re
-import aiohttp
 from aiohttp import web
 import discord
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from openai import AsyncOpenAI, RateLimitError
-from zoneinfo import ZoneInfo
 
 # 1. Загружаем переменные окружения
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
-PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY")
 
 # Инициализируем клиент OpenRouter
 openrouter_client = AsyncOpenAI(
@@ -23,12 +20,28 @@ openrouter_client = AsyncOpenAI(
     api_key=OPENROUTER_KEY,
 )
 
-# ID текстового канала и таймзоны
+# ID текстового канала
 CHANNEL_ID = 1424321634935902302
-KYIV_TZ = ZoneInfo("Europe/Kyiv")
-DAILY_TIME = datetime.time(hour=10, minute=0, second=0, tzinfo=KYIV_TZ)
-LOX_TIME = datetime.time(hour=18, minute=0, second=0, tzinfo=KYIV_TZ)
-NIGHT_TIME = datetime.time(hour=23, minute=10, second=0, tzinfo=KYIV_TZ)
+
+# Функция получения текущего времени по Киеву без библиотеки tzdata
+def get_kyiv_now():
+    # Киев: UTC+2 (зимой) / UTC+3 (летом). Работаем через фиксированное смещение UTC+2 / UTC+3
+    # Для автоматического определения смещения используем стандартный datetime с timezone
+    utc_now = datetime.datetime.now(datetime.timezone.utc)
+    # Украина переходит на летнее время в последнее воскресенье марта и на зимнее в последнее воскресенье октября
+    # Вычисляем смещение: +3 летом, +2 зимой
+    year = utc_now.year
+    dst_start = datetime.datetime(year, 3, 31, 1, tzinfo=datetime.timezone.utc)
+    dst_start -= datetime.timedelta(days=(dst_start.weekday() + 1) % 7)
+    dst_end = datetime.datetime(year, 10, 31, 1, tzinfo=datetime.timezone.utc)
+    dst_end -= datetime.timedelta(days=(dst_end.weekday() + 1) % 7)
+    
+    if dst_start <= utc_now < dst_end:
+        kyiv_tz = datetime.timezone(datetime.timedelta(hours=3)) # EEST (Лето)
+    else:
+        kyiv_tz = datetime.timezone(datetime.timedelta(hours=2)) # EET (Зима)
+        
+    return utc_now.astimezone(kyiv_tz)
 
 current_lox_of_the_day = None
 current_lox_member = None
@@ -109,40 +122,7 @@ SYSTEM_PROMPT = """
 """
 
 
-# 🔍 Поиск картинок по запросу (через Pixabay API)
-async def search_image(query: str) -> str | None:
-    if not PIXABAY_API_KEY:
-        print("❌ Не задан PIXABAY_API_KEY в переменных окружения")
-        return None
-
-    params = {
-        "key": PIXABAY_API_KEY,
-        "q": query,
-        "image_type": "photo",
-        "safesearch": "true",
-        "per_page": 20,
-        "lang": "ru",
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://pixabay.com/api/", params=params) as resp:
-                if resp.status != 200:
-                    print(f"❌ Pixabay вернул статус {resp.status}")
-                    return None
-                data = await resp.json()
-    except Exception as e:
-        print(f"❌ Ошибка запроса к Pixabay: {e}")
-        return None
-
-    hits = data.get("hits", [])
-    if not hits:
-        return None
-
-    return random.choice(hits)["largeImageURL"]
-
-
-# 🌐 Веб-сервер для Render
+# 🌐 Веб-сервер для поддержания работы
 async def handle(request):
     return web.Response(text="Bot is running 24/7!")
 
@@ -158,9 +138,38 @@ async def start_web_server():
     print(f"🌐 Веб-сервер запущен на порту {port}")
 
 
-# Фоновые задачи
-@tasks.loop(time=NIGHT_TIME)
-async def send_night_wish():
+# Флаги, чтобы авто-сообщения отправлялись строго 1 раз в нужный час
+last_track_day = None
+last_lox_day = None
+last_night_day = None
+
+# Единая фоновая задача проверки времени раз в минуту (без библиотеки tzdata)
+@tasks.loop(minutes=1)
+async def schedule_checker():
+    global last_track_day, last_lox_day, last_night_day
+    
+    kyiv_time = get_kyiv_now()
+    current_day = kyiv_time.date()
+    hour = kyiv_time.hour
+    minute = kyiv_time.minute
+
+    # 1. Трек дня в 10:00 по Киеву
+    if hour == 10 and minute == 0 and last_track_day != current_day:
+        last_track_day = current_day
+        await send_daily_track_action()
+
+    # 2. Лох дня в 18:00 по Киеву
+    if hour == 18 and minute == 0 and last_lox_day != current_day:
+        last_lox_day = current_day
+        await send_daily_lox_action()
+
+    # 3. Спокойной ночи в 23:00 по Киеву
+    if hour == 23 and minute == 0 and last_night_day != current_day:
+        last_night_day = current_day
+        await send_night_wish_action()
+
+
+async def send_night_wish_action():
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
         embed = discord.Embed(
@@ -175,8 +184,7 @@ async def send_night_wish():
         )
 
 
-@tasks.loop(time=LOX_TIME)
-async def send_daily_lox():
+async def send_daily_lox_action():
     global current_lox_of_the_day, current_lox_member
     channel = bot.get_channel(CHANNEL_ID)
     if not channel:
@@ -215,8 +223,7 @@ async def send_daily_lox():
     await channel.send(embed=embed)
 
 
-@tasks.loop(time=DAILY_TIME)
-async def send_daily_track():
+async def send_daily_track_action():
     channel = bot.get_channel(CHANNEL_ID)
     if channel:
         song = random.choice(TRACKS_LIST)
@@ -240,23 +247,6 @@ async def on_message(message):
 
     content = message.content.lower().strip()
 
-    # Запрос картинки через Асу
-    image_request = re.search(
-        r"(найди|покажи|скинь|кинь)\s+(картинк\w*|фот\w*|изображени\w*)\s+(.+)",
-        content,
-    )
-    if "аса" in content and image_request:
-        query = image_request.group(3).strip()
-        async with message.channel.typing():
-            image_url = await search_image(query)
-            if image_url:
-                embed = discord.Embed(title=f"🔍 {query}", color=discord.Color.blurple())
-                embed.set_image(url=image_url)
-                await message.channel.send(embed=embed)
-            else:
-                await message.channel.send("Тск, ничего подходящего не нашла.")
-        return
-
     # Обращение к Асе
     if "аса" in content:
         async with message.channel.typing():
@@ -271,12 +261,12 @@ async def on_message(message):
                 user_text_with_author = f"[Сообщение от {message.author.name}, ID: {message.author.id}]: {user_prompt}"
 
                 response = await openrouter_client.chat.completions.create(
-                model="openrouter/free",
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_text_with_author},
-    ],
-)
+                    model="openrouter/free",
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": user_text_with_author},
+                    ],
+                )
 
                 answer = response.choices[0].message.content
 
@@ -347,14 +337,8 @@ async def on_ready():
     await start_web_server()
     print(f"✅ Бот {bot.user} успешно запустился!")
 
-    if not send_daily_track.is_running():
-        send_daily_track.start()
-
-    if not send_daily_lox.is_running():
-        send_daily_lox.start()
-
-    if not send_night_wish.is_running():
-        send_night_wish.start()
+    if not schedule_checker.is_running():
+        schedule_checker.start()
 
 
 # Единая обработка ошибок команд
@@ -382,8 +366,7 @@ async def help(ctx):
         value=(
             "`!ping` или `пинг` — проверить, на месте ли я\n"
             "`!track` — выдать случайный трек\n"
-            "`!who_lox` или `кто лох` — узнать Лоха дня\n"
-            "`!картинка <запрос>` или «аса покажи картинку ...» — найти изображение"
+            "`!who_lox` или `кто лох` — узнать Лоха дня"
         ),
         inline=False,
     )
@@ -425,18 +408,6 @@ async def who_lox(ctx):
 @bot.command()
 async def ping(ctx):
     await ctx.send("Понг! 🏓 Я на связи!")
-
-
-@bot.command(name="картинка")
-async def image_cmd(ctx, *, query: str):
-    async with ctx.typing():
-        image_url = await search_image(query)
-        if image_url:
-            embed = discord.Embed(title=f"🔍 {query}", color=discord.Color.blurple())
-            embed.set_image(url=image_url)
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("Тск, ничего подходящего не нашла.")
 
 
 @bot.command()
